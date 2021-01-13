@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  scraper:
+    build: .
+    environment:
+      RUST_ENV: docker
+      CONFIG_PATH: /app/config
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./channels_2k.json:/app/channels.json
+    tty: true
+    restart: unless-stopped

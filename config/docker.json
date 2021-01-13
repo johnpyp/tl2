@@ -1,0 +1,13 @@
+{
+  "twitch": {
+    "channels": {
+      "adapter": "Json",
+      "path": "/app/channels.json"
+    }
+  },
+  "writers": {
+    "filesystem": {
+      "path": "/app/logs"
+    }
+  }
+}

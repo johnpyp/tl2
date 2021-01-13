@@ -1,0 +1,42 @@
+version: '3'
+
+services:
+  # kafka:
+  #   image: confluentinc/cp-kafka:5.4.3
+  #   environment:
+  #     - KAFKA_BROKER_ID=0
+  #     - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+  #     - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
+  #     - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+  #     - KAFKA_NUM_PARTITIONS=1
+  #     - CONFLUENT_SUPPORT_METRICS_ENABLE=0
+  #   ports: ["9092:9092"]
+  #   links: [zookeeper]
+  #
+  # zookeeper:
+  #   image: confluentinc/cp-zookeeper:5.4.3
+  #   environment:
+  #     - ZOOKEEPER_CLIENT_PORT=2181
+  #   ports: ["2181:2181"]
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.1
+    environment:
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - discovery.type=single-node
+      - 'ES_JAVA_OPTS=-Xms4096m -Xmx4096m'
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9200:9200
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.10.1
+    ports:
+      - 5601:5601
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on:
+      - elasticsearch

@@ -178,24 +178,22 @@ async fn initialize_template(client: &Elasticsearch, index: &str) -> Result<()> 
             index
         )))
         .body(json!({
-          "index_patterns": index.to_string() + "*",
-          "template": {
-            "mappings": {
-              "properties": {
-                "channel": { "type": "keyword" },
-                "text": { "type": "text" },
-                "ts": { "type": "date" },
-                "username": { "type": "keyword" },
-              },
+          "index_patterns": index.to_string() + "-*",
+          "mappings": {
+            "properties": {
+              "channel": { "type": "keyword" },
+              "text": { "type": "text" },
+              "ts": { "type": "date" },
+              "username": { "type": "keyword" },
             },
-            "settings": {
-              "number_of_replicas": 0,
-              "number_of_shards": 1,
-              "refresh_interval": "1s",
-              "sort.field": ["ts", "ts"],
-              "sort.order": ["desc", "asc"],
-              "codec": "best_compression",
-            },
+          },
+          "settings": {
+            "number_of_replicas": 0,
+            "number_of_shards": 1,
+            "refresh_interval": "1s",
+            "sort.field": ["ts", "ts"],
+            "sort.order": ["desc", "asc"],
+            "codec": "best_compression",
           },
         }))
         .send()

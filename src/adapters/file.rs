@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use log::error;
+use log::{error, info, trace};
 use tokio::{
     fs::OpenOptions,
     io::AsyncWriteExt,
@@ -88,58 +88,74 @@ impl FileWorker {
         let queue = self
             .file_queues
             .entry(channel.to_string())
-            .or_insert_with(|| QueuedAppender::new(path, 100, Duration::from_secs(30)));
-        queue.write(line.to_string()).await?;
+            .or_insert_with(|| {
+                QueuedAppender::new(channel.to_string(), 100, Duration::from_secs(60))
+            });
+        queue.write(path, line.to_string()).await?;
 
         Ok(())
     }
 }
 
 struct QueuedAppender {
-    path: PathBuf,
+    channel: String,
     period: Duration,
     capacity: usize,
-    queue: Vec<String>,
+    queue: HashMap<PathBuf, Vec<String>>,
     last_time: Instant,
 }
 
 impl QueuedAppender {
-    fn new(path: PathBuf, capacity: usize, period: Duration) -> Self {
+    fn new(channel: String, capacity: usize, period: Duration) -> Self {
         QueuedAppender {
-            path,
+            channel,
             period,
             capacity,
-            queue: Vec::new(),
+            queue: HashMap::new(),
             last_time: Instant::now(),
         }
     }
 
-    async fn write(&mut self, line: String) -> std::io::Result<()> {
-        self.queue.push(line);
-        if self.queue.len() >= self.capacity || self.time_ready() {
+    fn queue_len(&self) -> usize {
+        self.queue.iter().fold(0usize, |sum, (_, v)| sum + v.len())
+    }
+    async fn write(&mut self, path: PathBuf, line: String) -> std::io::Result<()> {
+        let list = self.queue.entry(path).or_insert_with(|| Vec::new());
+        list.push(line);
+        let queue_len = self.queue_len();
+        let time_ready = self.time_ready();
+        if queue_len >= self.capacity || time_ready {
+            trace!(
+                "Flushing with channel: {}, queue_len: {}, capacity: {}, time_ready: {}",
+                self.channel,
+                queue_len,
+                self.capacity,
+                time_ready
+            );
             self.flush().await?;
         }
         Ok(())
     }
 
     async fn flush(&mut self) -> std::io::Result<()> {
-        if self.queue.len() > 0 {
-            let to_write = self.queue.join("\n") + "\n";
-            let mut file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&self.path)
-                .await?;
+        for (path, list) in &mut self.queue {
+            if list.len() > 0 {
+                let to_write = list.join("\n") + "\n";
+                let mut file = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&path)
+                    .await?;
 
-            file.write_all(to_write.as_bytes()).await?;
-
-            self.queue.clear();
-            self.last_time = Instant::now();
+                file.write_all(to_write.as_bytes()).await?;
+            }
         }
+        self.last_time = Instant::now();
+        self.queue.clear();
         Ok(())
     }
 
     fn time_ready(&self) -> bool {
-        return self.period >= Instant::now().duration_since(self.last_time);
+        return self.period <= Instant::now().duration_since(self.last_time);
     }
 }

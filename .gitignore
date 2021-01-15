@@ -10,4 +10,4 @@ Cargo.lock
 logs/
 channels*.json
 channels*.txt
-config/*.local.json
+config/*_local.json

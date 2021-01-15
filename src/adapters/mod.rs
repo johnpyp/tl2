@@ -7,7 +7,6 @@ use self::{
 };
 use crate::events::AllEvents;
 
-pub mod clickhouse;
 pub mod console;
 pub mod console_metrics;
 pub mod elasticsearch;

@@ -2,13 +2,18 @@ version: '3'
 
 services:
   scraper:
-    build: .
+    build:
+      context: .
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
     environment:
       RUST_ENV: docker
       CONFIG_PATH: /app/config
     volumes:
       - ./config:/app/config
-      - ./logs:/app/logs
-      - ./channels_2k.json:/app/channels.json
+      - ${HOST_LOGS_PATH:-./logs}:/app/logs
+      - ${HOST_CHANNELS_PATH:-./channels}.json:/app/channels
     tty: true
-    restart: unless-stopped
+    init: true
+    network_mode: host

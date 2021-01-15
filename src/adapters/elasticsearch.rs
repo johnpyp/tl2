@@ -3,18 +3,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use elasticsearch::{
-    http::{
-        request::JsonBody,
-        transport::{SingleNodeConnectionPool, Transport, TransportBuilder},
-    },
+    http::{request::JsonBody, transport::Transport},
     indices::IndicesPutTemplateParts,
     ingest::IngestPutPipelineParts,
     BulkParts, Elasticsearch,
 };
 use log::{error, info};
-use reqwest::Url;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -40,9 +37,10 @@ impl ElasticsearchWriter {
             pipeline: config.pipeline.clone(),
             batch_size: config.batch_size,
             period: Duration::from_secs(config.batch_period_seconds),
+            retries: 0,
         };
 
-        tokio::spawn(async move { worker.run().await });
+        tokio::spawn(async move { worker.work().await });
         Ok(ElasticsearchWriter { config, tx })
     }
 }
@@ -65,37 +63,59 @@ struct ElasticsearchWorker {
     pub pipeline: Option<String>,
     pub batch_size: u64,
     pub period: Duration,
+    pub retries: i32,
 }
 
 impl ElasticsearchWorker {
-    async fn run(&mut self) {
-        info!("Initializing ES templates");
-        if let Err(e) = initialize_template(&self.client, &self.index).await {
-            error!("Error initializing elasticsearch templates: {:?}", e);
-            return;
-        }
-        info!("Initializing ES pipelines");
-        if let Some(pipeline) = &self.pipeline {
-            if let Err(e) = initialize_pipeline(&self.client, &self.index, &pipeline).await {
-                error!("Error initializing elasticsearch pipelines: {:?}", e);
+    async fn work(&mut self) {
+        loop {
+            if let Err(e) = self.run().await {
+                error!("Elasticsearch adapter failed: {:?}", e);
+                self.retries += 1;
+            }
+            if self.retries > 5 {
+                error!("Reached 5 failing retries on elasticsearch without a successful batch, shutting down writer...");
                 return;
             }
+            info!("Reinitializing elasticsearch writer in 5 seconds...");
+            tokio::time::delay_for(Duration::from_secs(5)).await;
         }
+    }
+    async fn run(&mut self) -> Result<()> {
+        self.inititalize().await?;
+
         let mut batch = Vec::new();
         let mut last_time = Instant::now();
+
         info!("Starting ES ingestion loop");
         while let Some(msg) = self.rx.recv().await {
             batch.push(msg);
             if batch.len() >= self.batch_size.try_into().unwrap()
                 || Instant::now().duration_since(last_time) > self.period
             {
-                if let Err(error) = self.process(&batch).await {
-                    error!("Error writing messages to elasticsearch: {:?}", error);
-                }
+                self.process(&batch)
+                    .await
+                    .with_context(|| "Processing batch of messages failed")?;
+                self.retries = 0;
                 batch.clear();
                 last_time = Instant::now();
             }
         }
+        Ok(())
+    }
+
+    async fn inititalize(&mut self) -> Result<()> {
+        info!("Initializing ES templates");
+        initialize_template(&self.client, &self.index)
+            .await
+            .with_context(|| "Error initializing elasticsearch templates")?;
+        info!("Initializing ES pipelines");
+        if let Some(pipeline) = &self.pipeline {
+            initialize_pipeline(&self.client, &self.index, &pipeline)
+                .await
+                .with_context(|| "Error initializing elasticsearch pipelines")?;
+        }
+        Ok(())
     }
 
     async fn process(&mut self, msgs: &Vec<SimpleMessage>) -> Result<()> {
@@ -123,6 +143,20 @@ impl ElasticsearchWorker {
             req = req.pipeline(pipeline)
         }
         let response = req.body(body).send().await?.error_for_status_code()?;
+
+        let response_body = response.json::<Value>().await?;
+
+        let has_errors = response_body["errors"].as_bool().unwrap();
+        if has_errors {
+            let reason = response_body["items"][0]["index"]["error"]["reason"].as_str();
+            if let Some(reason) = reason {
+                bail!("Bulk request failed, first error reason: '{}'", reason);
+            } else {
+                bail!(
+                    "Some of bulk request failed, first document seems to have succeeded though."
+                );
+            }
+        }
         Ok(())
     }
 }
@@ -137,7 +171,7 @@ fn create_elasticsearch_client(host: &str, port: u32) -> Result<Elasticsearch> {
 }
 
 async fn initialize_template(client: &Elasticsearch, index: &str) -> Result<()> {
-    let response = client
+    let exception = client
         .indices()
         .put_template(IndicesPutTemplateParts::Name(&format!(
             "{}-template",
@@ -165,15 +199,21 @@ async fn initialize_template(client: &Elasticsearch, index: &str) -> Result<()> 
           },
         }))
         .send()
+        .await?
+        .exception()
         .await?;
-    let response_body = response.json::<Value>().await?;
-    dbg!(response_body);
+    if let Some(exception) = exception {
+        bail!(
+            "Initializing templates failed with Exception: {:?}",
+            exception
+        );
+    }
 
     Ok(())
 }
 
 async fn initialize_pipeline(client: &Elasticsearch, index: &str, pipeline: &str) -> Result<()> {
-    let response = client
+    let exception = client
         .ingest()
         .put_pipeline(IngestPutPipelineParts::Id(pipeline))
         .body(json!({
@@ -195,9 +235,15 @@ async fn initialize_pipeline(client: &Elasticsearch, index: &str, pipeline: &str
           ],
         }))
         .send()
+        .await?
+        .exception()
         .await?;
-    let response_body = response.json::<Value>().await?;
-    dbg!(response_body);
+    if let Some(exception) = exception {
+        bail!(
+            "Initializing pipeline failed with Exception: {:?}",
+            exception
+        );
+    }
 
     Ok(())
 }

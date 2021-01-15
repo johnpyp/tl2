@@ -2,7 +2,7 @@
   "twitch": {
     "channels": {
       "adapter": "Json",
-      "path": "/app/channels.json"
+      "path": "/app/channels/channels.json"
     }
   },
   "writers": {

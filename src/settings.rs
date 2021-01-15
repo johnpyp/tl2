@@ -2,8 +2,15 @@ use std::{env, path::PathBuf};
 
 use anyhow::Result;
 use config::{Config, Environment, File};
+use log::info;
 use serde::Deserialize;
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct DiscordAlertingSettings {
+    pub enabled: bool,
+    pub webhook_url: Option<String>,
+    pub owner: Option<String>,
+}
 #[derive(Clone, Debug, Deserialize)]
 pub struct ConsoleMetricsSettings {
     pub enabled: bool,
@@ -48,6 +55,7 @@ pub struct WritersSettings {
 pub enum ChannelsAdapter {
     Json { path: String },
     Sqlite { path: String, table: String },
+    Http { url: String, bearer_token: String },
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -68,6 +76,7 @@ pub struct DggSettings {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Settings {
     pub debug: String,
+    pub discord_alerting: DiscordAlertingSettings,
     pub writers: WritersSettings,
     pub twitch: TwitchSettings,
     pub dgg_like: Vec<DggSettings>,
@@ -83,10 +92,11 @@ impl Settings {
 
         s.merge(File::from(config_path.join("default")))?
             .merge(File::from(config_path.join(&env)))?
-            .merge(File::from(config_path.join(env + ".local")))?
+            .merge(File::from(config_path.join(env + "_local")))?
             .merge(Environment::with_prefix("app"))?;
 
         let settings: Settings = s.try_into()?;
+        info!("Loaded settings: {:#?}", settings);
         Ok(settings)
     }
 }

@@ -5,9 +5,14 @@
     "use_websocket": true,
     "channels": {
       "adapter": "Json",
-      "path": "channels_2k.json"
+      "path": "./channels/channels.json"
     },
-    "sync_channels_interval": 120
+    "sync_channels_interval": 30
+  },
+  "discord_alerting": {
+    "enabled": false,
+    "webhook_url": null,
+    "owner": null
   },
   "dgg_like": [
     {

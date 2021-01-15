@@ -1,9 +1,12 @@
+use serde::Deserialize;
 pub mod events;
 use std::{collections::HashSet, iter::FromIterator, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use events::TwitchEvent;
 use futures::StreamExt;
+use log::error;
+use reqwest::Client;
 use tokio::{
     fs,
     sync::{
@@ -37,7 +40,7 @@ impl TwitchScraper {
 
             // 1 connection every 2 seconds seems to work well
             connection_rate_limiter: Arc::new(Semaphore::new(1)),
-            new_connection_every: Duration::from_secs(20),
+            new_connection_every: Duration::from_secs(8),
             connect_timeout: Duration::from_secs(20),
         };
         let (incoming_messages, client) =
@@ -70,6 +73,18 @@ impl TwitchScraper {
                 Ok(channels)
             }
             ChannelsAdapter::Sqlite { path: _, table: _ } => Ok(vec!["Xqcow".to_string()]),
+            ChannelsAdapter::Http { url, bearer_token } => {
+                let response = Client::new()
+                    .get(url)
+                    .header("Authorization", format!("Bearer {}", bearer_token))
+                    .send()
+                    .await?;
+                let response: GenericHttpResponse<ChannelsResponse> = response
+                    .json()
+                    .await
+                    .with_context(|| "Unexpected response json from node api")?;
+                Ok(response.data.channels)
+            }
         }
     }
 
@@ -91,12 +106,10 @@ impl TwitchScraper {
     }
 
     pub async fn sync_channels(&self) {
-        let channels = self
-            .hydrate_channels()
-            .await
-            .expect("Hydrating channels failed");
-
-        self.join_channels(channels);
+        match self.hydrate_channels().await {
+            Ok(channels) => self.join_channels(channels),
+            Err(e) => error!("Error hydrating channels, keeping the same. {:?}", e),
+        }
     }
 
     async fn run_channel_syncer(&self) {
@@ -119,4 +132,14 @@ impl TwitchScraper {
             }
         })
     }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct GenericHttpResponse<T> {
+    data: T,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct ChannelsResponse {
+    channels: Vec<String>,
 }

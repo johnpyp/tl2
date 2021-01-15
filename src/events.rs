@@ -30,10 +30,11 @@ impl SimpleMessage {
         }
 
         Self {
+            id: self.id.clone(),
             channel: case::capitalize(self.channel.trim(), true),
+            timestamp: self.timestamp,
             username,
-            text: self.text.trim().to_string(),
-            ..self.clone()
+            text: self.text.trim().replace("\n", " ").to_string(),
         }
     }
 }

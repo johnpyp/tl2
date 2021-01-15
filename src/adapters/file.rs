@@ -89,7 +89,7 @@ impl FileWorker {
             .file_queues
             .entry(channel.to_string())
             .or_insert_with(|| {
-                QueuedAppender::new(channel.to_string(), 100, Duration::from_secs(60))
+                QueuedAppender::new(channel.to_string(), 100, Duration::from_secs(30))
             });
         queue.write(path, line.to_string()).await?;
 

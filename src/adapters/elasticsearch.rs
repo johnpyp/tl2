@@ -13,6 +13,7 @@ use elasticsearch::{
 use log::{error, info};
 use serde_json::{json, Value};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio_compat_02::FutureExt;
 
 use super::Writer;
 use crate::{
@@ -39,7 +40,7 @@ impl ElasticsearchWriter {
             retries: 0,
         };
 
-        tokio::spawn(async move { worker.work().await });
+        tokio::spawn(async move { worker.work().compat().await });
         Ok(ElasticsearchWriter { config, tx })
     }
 }

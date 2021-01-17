@@ -1,6 +1,8 @@
 use chrono::Utc;
+use humantime::format_duration;
 use twitch_irc::message::{
-    HostTargetAction, HostTargetMessage, PrivmsgMessage, UserNoticeEvent, UserNoticeMessage,
+    ClearChatAction, ClearChatMessage, HostTargetAction, HostTargetMessage, PrivmsgMessage,
+    UserNoticeEvent, UserNoticeMessage,
 };
 
 use crate::events::{SimpleMessage, SimpleMessageGroup, Usernames};
@@ -10,6 +12,7 @@ pub enum TwitchEvent {
     HostTarget(HostTargetMessage),
     Privmsg(PrivmsgMessage),
     UserNotice(UserNoticeMessage),
+    ClearChat(ClearChatMessage),
 }
 
 impl From<TwitchEvent> for SimpleMessageGroup {
@@ -19,6 +22,7 @@ impl From<TwitchEvent> for SimpleMessageGroup {
             HostTarget(m) => m.into(),
             Privmsg(m) => m.into(),
             UserNotice(m) => m.into(),
+            ClearChat(m) => m.into(),
         }
     }
 }
@@ -54,7 +58,7 @@ impl From<PrivmsgMessage> for SimpleMessageGroup {
             id: Some(msg.message_id),
             timestamp: msg.server_timestamp,
             channel: msg.channel_login.clone(),
-            username: Usernames::Normal(msg.sender.login),
+            username: Usernames::Normal(msg.sender.login.clone()),
             text: msg.message_text,
         });
 
@@ -64,10 +68,41 @@ impl From<PrivmsgMessage> for SimpleMessageGroup {
                 timestamp: msg.server_timestamp,
                 channel: msg.channel_login.clone(),
                 username: Usernames::Bits,
-                text: format!("{} donated {} bits to the channel!", msg.sender.name, bits),
+                text: format!(
+                    "{} donated {} bits to the channel!",
+                    &msg.sender.login, bits
+                ),
             })
         }
         SimpleMessageGroup(messages)
+    }
+}
+
+impl From<ClearChatMessage> for SimpleMessageGroup {
+    fn from(msg: ClearChatMessage) -> Self {
+        let text = match msg.action {
+            ClearChatAction::UserBanned { user_login, .. } => {
+                format!("{} permanently banned", user_login)
+            }
+            ClearChatAction::UserTimedOut {
+                user_login,
+                timeout_length,
+                ..
+            } => format!(
+                "{} timed out for {}",
+                user_login,
+                format_duration(timeout_length).to_string()
+            ),
+            _ => return None.into(),
+        };
+        SimpleMessage {
+            id: None,
+            channel: msg.channel_login.clone(),
+            timestamp: msg.server_timestamp,
+            username: Usernames::Moderation,
+            text,
+        }
+        .into()
     }
 }
 
@@ -108,7 +143,7 @@ impl From<UserNoticeMessage> for SimpleMessageGroup {
                     Usernames::Subscriber,
                     format!(
                         "{} just {} {} {} for {} months!{}",
-                        msg.sender.name,
+                        msg.sender.login,
                         sub_verb,
                         if sub_plan == "Prime" { "with" } else { "at" },
                         tiers_format(&sub_plan),
@@ -130,9 +165,9 @@ impl From<UserNoticeMessage> for SimpleMessageGroup {
                 Usernames::Subscriber,
                 format!(
                     "{} gifted a {} sub to {}!",
-                    msg.sender.name,
+                    msg.sender.login,
                     tiers_format(&sub_plan),
-                    recipient.name
+                    recipient.login
                 ),
             )),
             UserNoticeEvent::AnonSubMysteryGift {
@@ -148,7 +183,7 @@ impl From<UserNoticeMessage> for SimpleMessageGroup {
                 Usernames::GiftSub,
                 format!(
                     "{} gifted {} {} subs to the community!",
-                    msg.sender.name,
+                    msg.sender.login,
                     mass_gift_count,
                     tiers_format(&sub_plan)
                 ),
@@ -158,7 +193,7 @@ impl From<UserNoticeMessage> for SimpleMessageGroup {
                 Usernames::Raid,
                 format!(
                     "{} just raided the channel with {} viewers!",
-                    msg.sender.name, viewer_count
+                    msg.sender.login, viewer_count
                 ),
             )),
             UserNoticeEvent::GiftPaidUpgrade { gifter_name, .. } => messages.push(easy_transform(
@@ -166,7 +201,7 @@ impl From<UserNoticeMessage> for SimpleMessageGroup {
                 Usernames::Subscriber,
                 format!(
                     "{} is continuing their gifted sub from {}",
-                    msg.sender.name, gifter_name
+                    msg.sender.login, gifter_name
                 ),
             )),
             UserNoticeEvent::AnonGiftPaidUpgrade { .. } => messages.push(easy_transform(
@@ -174,7 +209,7 @@ impl From<UserNoticeMessage> for SimpleMessageGroup {
                 Usernames::Subscriber,
                 format!(
                     "{} is continuing their anonymous gifted sub!",
-                    msg.sender.name,
+                    msg.sender.login,
                 ),
             )),
             UserNoticeEvent::Ritual { ritual_name: _ } => {}

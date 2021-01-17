@@ -11,7 +11,6 @@ use elasticsearch::{
     BulkParts, Elasticsearch,
 };
 use log::{error, info};
-use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -78,7 +77,7 @@ impl ElasticsearchWorker {
                 return;
             }
             info!("Reinitializing elasticsearch writer in 5 seconds...");
-            tokio::time::delay_for(Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
         }
     }
     async fn run(&mut self) -> Result<()> {

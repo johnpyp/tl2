@@ -61,7 +61,7 @@ impl DggWorker {
         loop {
             if self.failing {
                 info!("Reconnecting after {} seconds...", backoff);
-                tokio::time::delay_for(Duration::from_secs(backoff)).await;
+                tokio::time::sleep(Duration::from_secs(backoff)).await;
                 backoff = self.backoff_max.min(backoff * 3);
             }
 
@@ -150,7 +150,7 @@ impl DggWorker {
                                     error!("IO Error in websocket: {:?}", err);
                                 }
                                 WsError::Http(code) => {
-                                    error!("HTTP error response code: {}", code)
+                                    error!("HTTP error response code: {:?}", code);
                                 }
                                 WsError::HttpFormat(err) => {
                                     error!("HTTP formatting error: {:?}", err);

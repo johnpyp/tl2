@@ -4,7 +4,6 @@ use std::{collections::HashSet, iter::FromIterator, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use events::TwitchEvent;
-use futures::StreamExt;
 use log::error;
 use reqwest::Client;
 use tokio::{
@@ -40,7 +39,7 @@ impl TwitchScraper {
 
             // 1 connection every 2 seconds seems to work well
             connection_rate_limiter: Arc::new(Semaphore::new(1)),
-            new_connection_every: Duration::from_secs(8),
+            new_connection_every: Duration::from_secs(2),
             connect_timeout: Duration::from_secs(20),
         };
         let (incoming_messages, client) =
@@ -95,10 +94,10 @@ impl TwitchScraper {
     }
 
     async fn run_forwarder(
-        mut recv: UnboundedReceiver<ServerMessage>,
+        mut rx: UnboundedReceiver<ServerMessage>,
         sender: &UnboundedSender<AllEvents>,
     ) {
-        while let Some(raw) = recv.next().await {
+        while let Some(raw) = rx.recv().await {
             if let Some(msg) = TwitchScraper::map_message(raw) {
                 sender.send(msg.into()).unwrap();
             }
@@ -125,6 +124,7 @@ impl TwitchScraper {
         Some(match raw {
             ServerMessage::Privmsg(msg) => TwitchEvent::Privmsg(msg),
             ServerMessage::UserNotice(msg) => TwitchEvent::UserNotice(msg),
+            ServerMessage::ClearChat(msg) => TwitchEvent::ClearChat(msg),
             // ServerMessage::HostTarget(msg) => TwitchEvent::HostTarget(msg),
             _ => {
                 // println!("Some random thing: {}", raw.source().command);

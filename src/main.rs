@@ -2,7 +2,7 @@ use adapters::{
     console::ConsoleWriter, console_metrics::ConsoleMetricsWriter,
     elasticsearch::ElasticsearchWriter, file::FileWriter, Writer, Writers,
 };
-use alerts::{Alert, AlertType, DiscordAlerting};
+use alerts::DiscordAlerting;
 use anyhow::Result;
 use env_logger::Env;
 use events::AllEvents;

@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use log::{error, info, trace};
+use log::{error, trace};
 use tokio::{
     fs::OpenOptions,
     io::AsyncWriteExt,
@@ -89,7 +89,7 @@ impl FileWorker {
             .file_queues
             .entry(channel.to_string())
             .or_insert_with(|| {
-                QueuedAppender::new(channel.to_string(), 100, Duration::from_secs(30))
+                QueuedAppender::new(channel.to_string(), 50, Duration::from_secs(5))
             });
         queue.write(path, line.to_string()).await?;
 

@@ -28,7 +28,7 @@ async fn run() -> Result<(), anyhow::Error> {
     let mut writers: Vec<Option<Writers>> = Vec::new();
     if settings.writers.elasticsearch.enabled {
         writers.push(Some(
-            ElasticsearchWriter::new(settings.writers.elasticsearch)?.into(),
+            ElasticsearchWriter::new(settings.writers.elasticsearch, alerting.clone())?.into(),
         ));
     }
     if settings.writers.filesystem.enabled {

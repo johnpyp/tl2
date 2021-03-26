@@ -1,4 +1,8 @@
-use std::time::{Duration, Instant};
+use std::{
+    mem::size_of_val,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::{bail, Context, Result};
 use elasticsearch::{
@@ -14,6 +18,7 @@ use tokio_compat_02::FutureExt;
 
 use super::Writer;
 use crate::{
+    alerts::DiscordAlerting,
     events::{AllEvents, SimpleMessage, SimpleMessageGroup},
     settings::ElasticsearchSettings,
 };
@@ -24,7 +29,10 @@ pub struct ElasticsearchWriter {
 }
 
 impl ElasticsearchWriter {
-    pub fn new(config: ElasticsearchSettings) -> Result<ElasticsearchWriter> {
+    pub fn new(
+        config: ElasticsearchSettings,
+        alerting: Arc<DiscordAlerting>,
+    ) -> Result<ElasticsearchWriter> {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
         let mut worker = ElasticsearchWorker {
@@ -36,7 +44,8 @@ impl ElasticsearchWriter {
             retries: 0,
         };
 
-        tokio::spawn(async move { worker.work().compat().await });
+        let alerting = alerting.clone();
+        tokio::spawn(async move { worker.work(&alerting).compat().await });
         Ok(ElasticsearchWriter { config, tx })
     }
 }
@@ -52,7 +61,7 @@ impl Writer for ElasticsearchWriter {
     }
 }
 
-const MAX_RETRY_COUNT: u64 = 24;
+const MAX_RETRY_SECONDS: u64 = 360;
 const BASE_RETRY_SECONDS: u64 = 5;
 
 const MIN_PERIOD_SECONDS: f64 = 2.;
@@ -69,13 +78,26 @@ struct ElasticsearchWorker {
 }
 
 impl ElasticsearchWorker {
-    async fn work(&mut self) {
+    async fn work(&mut self, alerting: &DiscordAlerting) {
+        let mut has_sent_failed = false;
         loop {
             if let Err(e) = self.run_writer().await {
                 error!("Elasticsearch adapter failed: {:?}", e);
-                self.retries = (self.retries + 1).min(MAX_RETRY_COUNT);
+                self.retries += 1;
             }
-            let retry_seconds = (BASE_RETRY_SECONDS * self.retries).max(BASE_RETRY_SECONDS);
+            if self.retries > 5 && !has_sent_failed {
+                alerting.error("Elasticsearch is failing, 5 retries in...");
+                has_sent_failed = true;
+            }
+
+            // That's enough...
+            if self.retries > 100 {
+                error!("Exiting elasticsearch after 100 failed retries :(");
+                return;
+            }
+            let retry_seconds = (BASE_RETRY_SECONDS * self.retries)
+                .max(BASE_RETRY_SECONDS)
+                .min(MAX_RETRY_SECONDS);
             info!(
                 "Reinitializing elasticsearch writer in {} seconds...",
                 retry_seconds

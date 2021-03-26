@@ -1,7 +1,4 @@
-use std::{
-    convert::TryInto,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use elasticsearch::{
@@ -35,8 +32,7 @@ impl ElasticsearchWriter {
             rx,
             index: config.index.clone(),
             pipeline: config.pipeline.clone(),
-            batch_size: config.batch_size,
-            period: Duration::from_secs(config.batch_period_seconds),
+            period_seconds: STARTING_PERIOD_SECONDS,
             retries: 0,
         };
 
@@ -56,14 +52,22 @@ impl Writer for ElasticsearchWriter {
     }
 }
 
+const MAX_RETRY_COUNT: u64 = 24;
+const BASE_RETRY_SECONDS: u64 = 5;
+
+const MIN_PERIOD_SECONDS: f64 = 2.;
+const MAX_PERIOD_SECONDS: f64 = 30.;
+const STARTING_PERIOD_SECONDS: f64 = 15.;
+
+const BATCH_SIZE: usize = 200;
+
 struct ElasticsearchWorker {
     pub client: Elasticsearch,
     pub rx: UnboundedReceiver<SimpleMessage>,
     pub index: String,
     pub pipeline: Option<String>,
-    pub batch_size: u64,
-    pub period: Duration,
-    pub retries: i32,
+    pub period_seconds: f64,
+    pub retries: u64,
 }
 
 impl ElasticsearchWorker {
@@ -71,14 +75,14 @@ impl ElasticsearchWorker {
         loop {
             if let Err(e) = self.run().await {
                 error!("Elasticsearch adapter failed: {:?}", e);
-                self.retries += 1;
+                self.retries = (self.retries + 1).min(MAX_RETRY_COUNT);
             }
-            if self.retries > 5 {
-                error!("Reached 5 failing retries on elasticsearch without a successful batch, shutting down writer...");
-                return;
-            }
-            info!("Reinitializing elasticsearch writer in 5 seconds...");
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            let retry_seconds = (BASE_RETRY_SECONDS * self.retries).max(BASE_RETRY_SECONDS);
+            info!(
+                "Reinitializing elasticsearch writer in {} seconds...",
+                retry_seconds
+            );
+            tokio::time::sleep(Duration::from_secs(retry_seconds as u64)).await;
         }
     }
     async fn run(&mut self) -> Result<()> {
@@ -89,10 +93,19 @@ impl ElasticsearchWorker {
 
         info!("Starting ES ingestion loop");
         while let Some(msg) = self.rx.recv().await {
+            let mut should_fire = false;
             batch.push(msg);
-            if batch.len() >= self.batch_size.try_into().unwrap()
-                || Instant::now().duration_since(last_time) > self.period
-            {
+
+            if batch.len() >= BATCH_SIZE {
+                should_fire = true;
+                self.period_seconds = (self.period_seconds * 1.2).floor().min(MAX_PERIOD_SECONDS);
+            }
+            if Instant::now().duration_since(last_time).as_secs_f64() > self.period_seconds {
+                should_fire = true;
+                self.period_seconds = (self.period_seconds * 0.8).floor().max(MIN_PERIOD_SECONDS);
+            }
+
+            if should_fire {
                 self.process(&batch)
                     .await
                     .with_context(|| "Processing batch of messages failed")?;

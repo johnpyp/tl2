@@ -7,7 +7,7 @@ use elasticsearch::{
     ingest::IngestPutPipelineParts,
     BulkParts, Elasticsearch,
 };
-use log::{error, info};
+use log::{debug, error, info};
 use serde_json::{json, Value};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_compat_02::FutureExt;
@@ -32,7 +32,7 @@ impl ElasticsearchWriter {
             rx,
             index: config.index.clone(),
             pipeline: config.pipeline.clone(),
-            period_seconds: STARTING_PERIOD_SECONDS,
+            period_seconds: MIN_PERIOD_SECONDS,
             retries: 0,
         };
 
@@ -56,10 +56,8 @@ const MAX_RETRY_COUNT: u64 = 24;
 const BASE_RETRY_SECONDS: u64 = 5;
 
 const MIN_PERIOD_SECONDS: f64 = 2.;
-const MAX_PERIOD_SECONDS: f64 = 30.;
-const STARTING_PERIOD_SECONDS: f64 = 15.;
 
-const BATCH_SIZE: usize = 200;
+const MAX_BATCH_SIZE: usize = 8192;
 
 struct ElasticsearchWorker {
     pub client: Elasticsearch,
@@ -73,7 +71,7 @@ struct ElasticsearchWorker {
 impl ElasticsearchWorker {
     async fn work(&mut self) {
         loop {
-            if let Err(e) = self.run().await {
+            if let Err(e) = self.run_writer().await {
                 error!("Elasticsearch adapter failed: {:?}", e);
                 self.retries = (self.retries + 1).min(MAX_RETRY_COUNT);
             }
@@ -85,7 +83,7 @@ impl ElasticsearchWorker {
             tokio::time::sleep(Duration::from_secs(retry_seconds as u64)).await;
         }
     }
-    async fn run(&mut self) -> Result<()> {
+    async fn run_writer(&mut self) -> Result<()> {
         self.inititalize().await?;
 
         let mut batch = Vec::new();
@@ -96,13 +94,22 @@ impl ElasticsearchWorker {
             let mut should_fire = false;
             batch.push(msg);
 
-            if batch.len() >= BATCH_SIZE {
+            if batch.len() >= MAX_BATCH_SIZE {
                 should_fire = true;
-                self.period_seconds = (self.period_seconds * 1.2).floor().min(MAX_PERIOD_SECONDS);
-            }
-            if Instant::now().duration_since(last_time).as_secs_f64() > self.period_seconds {
+                // self.period_seconds = (self.period_seconds * 1.2).ceil().min(MAX_PERIOD_SECONDS);
+                debug!(
+                    "Hit max batch, size: {}, period: {}",
+                    batch.len(),
+                    self.period_seconds
+                );
+            } else if Instant::now().duration_since(last_time).as_secs_f64() > self.period_seconds {
                 should_fire = true;
-                self.period_seconds = (self.period_seconds * 0.8).floor().max(MIN_PERIOD_SECONDS);
+                // self.period_seconds = (self.period_seconds * 0.8).floor().max(MIN_PERIOD_SECONDS);
+                debug!(
+                    "Hit period, size: {}, period: {}",
+                    batch.len(),
+                    self.period_seconds
+                );
             }
 
             if should_fire {

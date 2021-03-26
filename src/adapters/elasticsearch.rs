@@ -92,6 +92,7 @@ impl ElasticsearchWorker {
 
             // That's enough...
             if self.retries > 100 {
+                alerting.error("Shutting down elasticsearch adapter after 100 failed retries :(");
                 error!("Exiting elasticsearch after 100 failed retries :(");
                 return;
             }

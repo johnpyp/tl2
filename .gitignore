@@ -11,5 +11,6 @@ logs/
 channels*.json
 channels*.txt
 config/*_local.json
+config/*_local.yml
 
 .env

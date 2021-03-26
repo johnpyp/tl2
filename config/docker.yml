@@ -1,0 +1,8 @@
+---
+twitch:
+  channels:
+    adapter: Json
+    path: "/app/channels/channels.json"
+writers:
+  filesystem:
+    path: "/app/logs"

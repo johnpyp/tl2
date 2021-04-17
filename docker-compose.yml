@@ -17,3 +17,4 @@ services:
     tty: true
     init: true
     network_mode: host
+    restart: unless-stopped

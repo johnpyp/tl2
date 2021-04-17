@@ -12,14 +12,18 @@ use tokio_tungstenite::{
 };
 
 use super::DggEvent;
-use crate::{events::AllEvents, settings::DggSettings};
+use crate::{events::AllEvents, settings::DggSiteSettings};
 
 pub struct DggScraper {
-    pub config: DggSettings,
+    pub config: DggSiteSettings,
 }
 
 impl DggScraper {
-    pub fn start(tx: UnboundedSender<AllEvents>, config: DggSettings) -> Arc<DggScraper> {
+    pub fn start(
+        tx: UnboundedSender<AllEvents>,
+        config: DggSiteSettings,
+        max_retry_seconds: u64,
+    ) -> Arc<DggScraper> {
         let channel = config.name.clone();
         let endpoint = config.endpoint.clone();
         let origin = config.origin.clone();
@@ -30,7 +34,7 @@ impl DggScraper {
             origin,
             failing: false,
             backoff_min: 2,
-            backoff_max: 30,
+            backoff_max: max_retry_seconds,
         };
         tokio::spawn(async move { worker.run().await });
         let scraper = Arc::new(DggScraper { config });

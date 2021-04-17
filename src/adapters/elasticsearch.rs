@@ -1,5 +1,4 @@
 use std::{
-    mem::size_of_val,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -42,6 +41,7 @@ impl ElasticsearchWriter {
             pipeline: config.pipeline.clone(),
             period_seconds: MIN_PERIOD_SECONDS,
             retries: 0,
+            max_retry_seconds: config.max_retry_seconds,
         };
 
         let alerting = alerting.clone();
@@ -61,7 +61,7 @@ impl Writer for ElasticsearchWriter {
     }
 }
 
-const MAX_RETRY_SECONDS: u64 = 360;
+// const MAX_RETRY_SECONDS: u64 = 360;
 const BASE_RETRY_SECONDS: u64 = 5;
 
 const MIN_PERIOD_SECONDS: f64 = 2.;
@@ -75,6 +75,7 @@ struct ElasticsearchWorker {
     pub pipeline: Option<String>,
     pub period_seconds: f64,
     pub retries: u64,
+    pub max_retry_seconds: u64,
 }
 
 impl ElasticsearchWorker {
@@ -98,7 +99,7 @@ impl ElasticsearchWorker {
             }
             let retry_seconds = (BASE_RETRY_SECONDS * self.retries)
                 .max(BASE_RETRY_SECONDS)
-                .min(MAX_RETRY_SECONDS);
+                .min(self.max_retry_seconds);
             info!(
                 "Reinitializing elasticsearch writer in {} seconds...",
                 retry_seconds

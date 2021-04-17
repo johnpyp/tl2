@@ -12,9 +12,11 @@ discord_alerting:
   webhook_url:
   owner:
 dgg_like:
-  - name: Destinygg
-    endpoint: wss://chat.destiny.gg/ws
-    origin: https://www.destiny.gg
+  max_retry_seconds: 120
+  sites:
+    - name: Destinygg
+      endpoint: wss://chat.destiny.gg/ws
+      origin: https://www.destiny.gg
 writers:
   elasticsearch:
     enabled: true
@@ -24,6 +26,7 @@ writers:
     pipeline: rustlesearch-pipeline
     batch_size: 1000
     batch_period_seconds: 10
+    max_retry_seconds: 360
   clickhouse:
     enabled: false
     host: localhost

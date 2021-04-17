@@ -28,6 +28,7 @@ pub struct ElasticsearchSettings {
     pub pipeline: Option<String>,
     pub batch_size: u64,
     pub batch_period_seconds: u64,
+    pub max_retry_seconds: u64,
 }
 #[derive(Clone, Debug, Deserialize)]
 pub struct ClickhouseSettings {
@@ -67,10 +68,16 @@ pub struct TwitchSettings {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct DggSettings {
+pub struct DggSiteSettings {
     pub name: String,
     pub endpoint: String,
     pub origin: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DggSettings {
+    pub sites: Vec<DggSiteSettings>,
+    pub max_retry_seconds: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -79,7 +86,7 @@ pub struct Settings {
     pub discord_alerting: DiscordAlertingSettings,
     pub writers: WritersSettings,
     pub twitch: TwitchSettings,
-    pub dgg_like: Vec<DggSettings>,
+    pub dgg_like: DggSettings,
 }
 
 impl Settings {

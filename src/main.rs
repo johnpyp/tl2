@@ -48,8 +48,12 @@ async fn run() -> Result<(), anyhow::Error> {
         // scraper.sync_channels().await;
     }
 
-    for dgg in settings.dgg_like {
-        DggScraper::start(event_sender.clone(), dgg);
+    for site in settings.dgg_like.sites {
+        DggScraper::start(
+            event_sender.clone(),
+            site,
+            settings.dgg_like.max_retry_seconds,
+        );
     }
 
     while let Some(message) = event_receiver.recv().await {

@@ -71,7 +71,8 @@ pub struct TwitchSettings {
 pub struct DggSiteSettings {
     pub name: String,
     pub endpoint: String,
-    pub origin: Option<String>,
+    pub origin: String,
+    pub use_get_key: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

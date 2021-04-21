@@ -17,6 +17,7 @@ dgg_like:
     - name: Destinygg
       endpoint: wss://chat.destiny.gg/ws
       origin: https://www.destiny.gg
+      use_get_key: false
 writers:
   elasticsearch:
     enabled: true

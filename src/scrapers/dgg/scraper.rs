@@ -1,7 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
+use anyhow::Result;
 use futures::{SinkExt, StreamExt};
 use log::{debug, error, info};
+use reqwest::Client;
+use serde::Deserialize;
 use tokio::{
     sync::mpsc::UnboundedSender,
     time::{interval_at, Instant},
@@ -27,11 +30,13 @@ impl DggScraper {
         let channel = config.name.clone();
         let endpoint = config.endpoint.clone();
         let origin = config.origin.clone();
+        let use_get_key = config.use_get_key.clone();
         let mut worker = DggWorker {
             tx,
             channel,
             endpoint,
             origin,
+            use_get_key,
             failing: false,
             backoff_min: 2,
             backoff_max: max_retry_seconds,
@@ -51,7 +56,8 @@ pub struct DggWorker {
     tx: UnboundedSender<AllEvents>,
     channel: String,
     endpoint: String,
-    origin: Option<String>,
+    origin: String,
+    use_get_key: bool,
     failing: bool,
     backoff_min: u64,
     backoff_max: u64,
@@ -86,10 +92,20 @@ impl DggWorker {
     }
 
     async fn start_websocket(&mut self) -> WorkerCommands {
-        let mut request = Request::builder().uri(&self.endpoint);
-        if let Some(origin) = &self.origin {
-            request = request.header("Origin", origin);
+        let mut endpoint = self.endpoint.to_owned();
+        if self.use_get_key {
+            let get_key_url = self.origin.clone() + "/api/chat/getkey";
+            let chat_key = match self.fetch_get_key(get_key_url.clone()).await {
+                Ok(v) => v,
+                Err(err) => {
+                    error!("Error fetching key for '{}': {:?}", get_key_url, err);
+                    return WorkerCommands::Stop;
+                }
+            };
+            endpoint = endpoint.to_owned() + "/" + &chat_key;
         }
+        let mut request = Request::builder().uri(endpoint);
+        request = request.header("Origin", &self.origin);
 
         let body = request.body(()).unwrap();
         info!("Connecting with {:?}", body);
@@ -190,4 +206,16 @@ impl DggWorker {
             }
         }
     }
+
+    async fn fetch_get_key(&self, get_key_url: String) -> Result<String> {
+        let response: GetKeyResponse = Client::new().get(get_key_url).send().await?.json().await?;
+
+        return Ok(response.chat_key);
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct GetKeyResponse {
+    #[serde(rename = "chatKey")]
+    chat_key: String,
 }

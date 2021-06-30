@@ -14,8 +14,8 @@ use tokio::{
     },
 };
 use twitch_irc::{
-    login::StaticLoginCredentials, message::ServerMessage, ClientConfig, TwitchIRCClient,
-    WSSTransport,
+    login::StaticLoginCredentials, message::ServerMessage, ClientConfig, SecureWSTransport,
+    TwitchIRCClient,
 };
 
 use crate::{
@@ -24,7 +24,7 @@ use crate::{
 };
 
 pub struct TwitchScraper {
-    pub client: TwitchIRCClient<WSSTransport, StaticLoginCredentials>,
+    pub client: TwitchIRCClient<SecureWSTransport, StaticLoginCredentials>,
     config: TwitchSettings,
 }
 
@@ -43,7 +43,7 @@ impl TwitchScraper {
             connect_timeout: Duration::from_secs(20),
         };
         let (incoming_messages, client) =
-            TwitchIRCClient::<WSSTransport, StaticLoginCredentials>::new(client_config);
+            TwitchIRCClient::<SecureWSTransport, StaticLoginCredentials>::new(client_config);
 
         // first thing you should do: start consuming incoming messages,
         // otherwise they will back up.

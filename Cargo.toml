@@ -7,28 +7,28 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.40"
+anyhow = "1.0.41"
 chrono = { version = "0.4.19", features = ["serde"] }
 colored = "2.0.0"
 config = "0.11.0"
-derive_more = "0.99.13"
+derive_more = "0.99.14"
 elasticsearch = "7.12.0-alpha.1"
-enum_dispatch = "0.3.5"
-env_logger = "0.8.3"
-futures = "0.3.14"
-httparse = "1.4.0"
+enum_dispatch = "0.3.7"
+env_logger = "0.8.4"
+futures = "0.3.15"
+httparse = "1.4.1"
 humantime = "2.1.0"
 log = "0.4.14"
 lru = "0.6.5"
 pretty_env_logger = "0.4.0"
-rand = "0.8.3"
-reqwest = { version = "0.11.3", features = ["json"] }
-serde = { version = "1.0.125", features = ["derive"] }
-serde_derive = "1.0.125"
+rand = "0.8.4"
+reqwest = { version = "0.11.4", features = ["json"] }
+serde = { version = "1.0.126", features = ["derive"] }
+serde_derive = "1.0.126"
 serde_json = "1.0.64"
-strum = { version = "0.20.0", features = ["derive"] }
-tokio = { version = "1.5.0", features = ["full"] }
+strum = { version = "0.21.0", features = ["derive"] }
+tokio = { version = "1.7.1", features = ["full"] }
 tokio-compat-02 = "0.2.0"
 tokio-tungstenite = { version = "0.14.0", features = ["rustls-tls"] }
-twitch-irc = { version = "2.2.0", features = ["transport-wss"] }
+twitch-irc = { version = "3.0.1", features = ["transport-ws-rustls-webpki-roots"] }
 voca_rs = "1.13.0"

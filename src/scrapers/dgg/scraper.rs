@@ -99,7 +99,7 @@ impl DggWorker {
                 Ok(v) => v,
                 Err(err) => {
                     error!("Error fetching key for '{}': {:?}", get_key_url, err);
-                    return WorkerCommands::Stop;
+                    return WorkerCommands::Reconnect;
                 }
             };
             endpoint = endpoint.to_owned() + "/" + &chat_key;

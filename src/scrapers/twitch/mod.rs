@@ -32,14 +32,14 @@ impl TwitchScraper {
     pub fn start(sender: UnboundedSender<AllEvents>, config: TwitchSettings) -> Arc<TwitchScraper> {
         let client_config = ClientConfig {
             login_credentials: StaticLoginCredentials::anonymous(),
-            max_channels_per_connection: 90,
+            max_channels_per_connection: 20,
 
             max_waiting_messages_per_connection: 5,
             time_per_message: Duration::from_millis(150),
 
             // 1 connection every 2 seconds seems to work well
-            connection_rate_limiter: Arc::new(Semaphore::new(1)),
-            new_connection_every: Duration::from_secs(2),
+            connection_rate_limiter: Arc::new(Semaphore::new(3)),
+            new_connection_every: Duration::from_secs(5),
             connect_timeout: Duration::from_secs(20),
         };
         let (incoming_messages, client) =

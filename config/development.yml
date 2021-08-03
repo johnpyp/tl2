@@ -1,1 +1,4 @@
 ---
+writers:
+  elasticsearch:
+    enabled: false

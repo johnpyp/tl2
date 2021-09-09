@@ -2,11 +2,12 @@ use anyhow::Result;
 use enum_dispatch::enum_dispatch;
 
 use self::{
-    console::ConsoleWriter, console_metrics::ConsoleMetricsWriter,
+    clickhouse::ClickhouseWriter, console::ConsoleWriter, console_metrics::ConsoleMetricsWriter,
     elasticsearch::ElasticsearchWriter, file::FileWriter,
 };
 use crate::events::AllEvents;
 
+pub mod clickhouse;
 pub mod console;
 pub mod console_metrics;
 pub mod elasticsearch;
@@ -18,6 +19,7 @@ pub enum Writers {
     Elasticsearch(ElasticsearchWriter),
     Console(ConsoleWriter),
     ConsoleMetrics(ConsoleMetricsWriter),
+    Clickhouse(ClickhouseWriter),
 }
 
 #[enum_dispatch(Writers)]

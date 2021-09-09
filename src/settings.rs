@@ -33,8 +33,10 @@ pub struct ElasticsearchSettings {
 #[derive(Clone, Debug, Deserialize)]
 pub struct ClickhouseSettings {
     pub enabled: bool,
-    pub host: String,
-    pub port: u32,
+    pub url: String,
+    pub db_name: Option<String>,
+    pub db_user: Option<String>,
+    pub db_pass: Option<String>,
 }
 #[derive(Clone, Debug, Deserialize)]
 pub struct FileSettings {

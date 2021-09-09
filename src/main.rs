@@ -11,6 +11,8 @@ use scrapers::{dgg::DggScraper, twitch::TwitchScraper};
 use settings::Settings;
 use tokio::sync::mpsc;
 
+use crate::adapters::clickhouse::ClickhouseWriter;
+
 pub mod adapters;
 pub mod alerts;
 pub mod events;
@@ -40,6 +42,12 @@ async fn run() -> Result<(), anyhow::Error> {
 
     if settings.writers.console_metrics.enabled {
         writers.push(Some(ConsoleMetricsWriter::new().into()))
+    }
+
+    if settings.writers.clickhouse.enabled {
+        writers.push(Some(
+            ClickhouseWriter::new(settings.writers.clickhouse, alerting.clone()).into(),
+        ))
     }
 
     let (event_sender, mut event_receiver) = mpsc::unbounded_channel::<AllEvents>();

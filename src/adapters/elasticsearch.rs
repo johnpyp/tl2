@@ -12,7 +12,7 @@ use elasticsearch::{
 };
 use log::{debug, error, info};
 use serde_json::{json, Value};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio_compat_02::FutureExt;
 
 use super::Writer;
@@ -32,7 +32,7 @@ impl ElasticsearchWriter {
         config: ElasticsearchSettings,
         alerting: Arc<DiscordAlerting>,
     ) -> Result<ElasticsearchWriter> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::unbounded_channel();
 
         let mut worker = ElasticsearchWorker {
             client: create_elasticsearch_client(&config.host, config.port)?,

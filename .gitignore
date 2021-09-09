@@ -14,3 +14,4 @@ config/*_local.json
 config/*_local.yml
 
 .env
+clickhouse-data/

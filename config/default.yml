@@ -30,8 +30,7 @@ writers:
     max_retry_seconds: 360
   clickhouse:
     enabled: false
-    host: localhost
-    port: "8123"
+    url: "http://localhost:8123"
   filesystem:
     enabled: true
     path: "./logs"

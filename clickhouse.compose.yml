@@ -7,8 +7,7 @@ services:
         soft: 262144
         hard: 262144
     volumes:
-      - ${CLICKHOUSE_PATH:-./clickhouse-data}:/var/lib/clickhouse
-      # - ./clickhouse-config.xml:/etc/clickhouse-server/config.xml
+      - ${CLICKHOUSE_PATH:-./clickhouse-data}/data:/var/lib/clickhouse
     ports:
       - 8123:8123
       - 9000:9000

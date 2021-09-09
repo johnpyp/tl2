@@ -13,7 +13,7 @@ services:
     volumes:
       - ./config:/app/config
       - ${HOST_LOGS_PATH:-./logs}:/app/logs
-      - ${HOST_CHANNELS_PATH:-./channels}.json:/app/channels
+      - ${HOST_CHANNELS_PATH:-./channels}:/app/channels
     tty: true
     init: true
     network_mode: host

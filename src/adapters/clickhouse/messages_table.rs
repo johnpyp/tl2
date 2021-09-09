@@ -25,7 +25,7 @@ pub struct ClickhouseMessage {
 impl TryFrom<PrivmsgMessage> for ClickhouseMessage {
     type Error = anyhow::Error;
     fn try_from(msg: PrivmsgMessage) -> Result<Self> {
-        let sub_badge = msg.badges.iter().find(|b| b.name == "subscriber");
+        let sub_badge = msg.badge_info.iter().find(|b| b.name == "subscriber");
         let subscribed = if let Some(badge) = sub_badge {
             match badge.version.parse::<u16>().ok() {
                 Some(count) => count,

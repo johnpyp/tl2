@@ -46,7 +46,7 @@ pub async fn files_to_clickhouse(paths: Vec<PathBuf>, channel: &str, url: &str) 
 
     let mut message_inserter = client
         .inserter::<ClickhouseMessage>("messages")?
-        .with_max_entries(16000)
+        .with_max_entries(256_000)
         .with_max_duration(Duration::from_secs(10));
 
     exec_files_to_clickhouse(&mut message_inserter, paths, channel).await?;

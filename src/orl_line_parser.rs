@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
+use chrono::{DateTime, NaiveDateTime, ParseError, TimeZone, Utc};
 use nom::{
-    bytes::complete::{tag, take_until, take_until1},
+    bytes::complete::{tag, take, take_until, take_until1},
     character::complete::space1,
     combinator::rest,
     error::VerboseError,
@@ -20,6 +20,17 @@ pub struct RawOrlLog {
     pub text: String,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct OrlDate {
+    pub year: i32,
+    pub month: u32,
+    pub day: u32,
+    pub hour: u32,
+    pub minute: u32,
+    pub second: u32,
+    pub ms: u32,
+}
+
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
 
 pub fn parse_orl_date(input: &str) -> Result<DateTime<Utc>, ParseError> {
@@ -28,10 +39,41 @@ pub fn parse_orl_date(input: &str) -> Result<DateTime<Utc>, ParseError> {
         Utc,
     ))
 }
-fn raw_orl_log_parser(input: &str) -> Res<&str, (&str, &str, &str)> {
-    let (_, (_, date_string, _, _, username, _, _, text)) = tuple((
+
+fn orl_date_string_parser(input: &str) -> Res<&str, OrlDate> {
+    let (rest, (yyyy, _, mm, _, dd, _, hh, _, minute, _, ss, _, ms, _)) = tuple((
+        take(4usize),
+        tag("-"),
+        take(2usize),
+        tag("-"),
+        take(2usize),
+        tag(" "),
+        take(2usize),
+        tag(":"),
+        take(2usize),
+        tag(":"),
+        take(2usize),
+        tag("."),
+        take(3usize),
+        tag(" UTC"),
+    ))(input)?;
+    Ok((
+        rest,
+        OrlDate {
+            year: yyyy.parse().unwrap(),
+            month: mm.parse().unwrap(),
+            day: dd.parse().unwrap(),
+            hour: hh.parse().unwrap(),
+            minute: minute.parse().unwrap(),
+            second: ss.parse().unwrap(),
+            ms: ms.parse().unwrap(),
+        },
+    ))
+}
+fn raw_orl_log_parser(input: &str) -> Res<&str, (OrlDate, &str, &str)> {
+    let (_, (_, orl_date, _, _, username, _, _, text)) = tuple((
         tag("["),
-        take_until("]"),
+        orl_date_string_parser,
         tag("]"),
         space1,
         take_until1(":"),
@@ -40,12 +82,14 @@ fn raw_orl_log_parser(input: &str) -> Res<&str, (&str, &str, &str)> {
         rest,
     ))(input)?;
 
-    return Ok(("", (date_string, username, text)));
+    return Ok(("", (orl_date, username, text)));
 }
 pub fn parse_orl_line(channel: &str, input: &str) -> Option<OrlLog> {
-    let (_, (date_string, username, text)) = raw_orl_log_parser(input).ok()?;
+    let (_, (od, username, text)) = raw_orl_log_parser(input).ok()?;
 
-    let timestamp: DateTime<Utc> = parse_orl_date(date_string).ok()?;
+    let timestamp = Utc
+        .ymd(od.year, od.month, od.day)
+        .and_hms_milli(od.hour, od.minute, od.second, od.ms);
     Some(OrlLog {
         ts: timestamp,
         channel: channel.to_string(),

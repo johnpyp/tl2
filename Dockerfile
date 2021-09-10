@@ -37,4 +37,4 @@ RUN chown -R $UNAME:$UNAME /app
 
 USER $UNAME
 
-CMD ["/app/app-bin"]
+CMD ["/app/app-bin", "scrape"]

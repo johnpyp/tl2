@@ -1,107 +1,164 @@
-use std::{path::PathBuf, time::Duration};
-
-use anyhow::Result;
-use clickhouse::{inserter::Inserter, Client};
-use itertools::Itertools;
-use log::info;
-
-use crate::{
-    adapters::clickhouse::messages_table::{self, ClickhouseMessage},
-    orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlLog},
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 
-async fn exec_files_to_clickhouse(
-    message_inserter: &mut Inserter<ClickhouseMessage>,
-    paths: Vec<PathBuf>,
-    channel: &str,
+use anyhow::{anyhow, Result};
+use async_stream::try_stream;
+use clickhouse::{inserter::Inserter, Client};
+use futures::TryStreamExt;
+use futures::{future::try_join_all, Stream};
+use itertools::{zip, Itertools};
+use log::{debug, info};
+use tokio::{spawn, sync::Mutex};
+
+use crate::{
+    adapters::clickhouse::messages_table::{self, ClickhouseOrlMessage},
+    orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlDirFile, OrlLog},
+};
+
+type SyncInserter<T> = Arc<Mutex<Inserter<T>>>;
+async fn insert_messages(
+    inserter: SyncInserter<ClickhouseOrlMessage>,
+    messages: Vec<ClickhouseOrlMessage>,
 ) -> Result<()> {
-    let mut count = 0;
-    for path in paths {
-        info!("Indexing file: {:?}", path);
-        let logs = parse_file_to_logs(&path, &channel).await?;
-        let messages = logs.into_iter().map(|log| orl_log_to_message(log));
-        info!("Starting to index messages");
-        for message_chunk in &messages.chunks(64000) {
-            for message in message_chunk.into_iter() {
-                message_inserter.write(&message).await?;
-                count += 1;
-            }
-            let quantities = message_inserter.commit().await?;
-            info!(
-                "Committed {} messages to clickhouse. Total: {}",
-                quantities.entries, count
-            );
-        }
+    let mut inserter = inserter.lock().await;
+    for message in messages {
+        inserter.write(&message).await?;
     }
-    info!(
-        "Finished inserting, all results flushed. Total messages inserted: {}",
-        count
-    );
+    inserter.commit().await?;
     Ok(())
 }
+async fn split_insert(
+    inserters: &Vec<SyncInserter<ClickhouseOrlMessage>>,
+    messages: Vec<ClickhouseOrlMessage>,
+) -> Result<()> {
+    let message_count = messages.len();
+    let chunk_size = (messages.len() / inserters.len()).max(1);
+    let mut futures = vec![];
+    let message_chunks = messages.chunks(chunk_size).collect_vec();
+    for (inserter, chunk) in zip(inserters, message_chunks) {
+        let inserter = inserter.clone();
+        let handle = spawn(insert_messages(inserter, chunk.to_vec()));
+        futures.push(handle);
+    }
+    try_join_all(futures).await?;
+    debug!("Committed {} messages to clickhouse", message_count);
+    Ok(())
+}
+
+fn create_message_stream(
+    orl_files: Vec<OrlDirFile>,
+) -> impl Stream<Item = Result<ClickhouseOrlMessage>> {
+    try_stream! {
+        for file in orl_files {
+            debug!("Processing file: {:?}", file.path);
+            let logs = parse_file_to_logs(&file.path, &file.channel).await?;
+            let messages = logs.into_iter().map(|log| orl_log_to_message(log));
+            for message in messages {
+                yield message;
+            }
+        }
+    }
+}
+
+async fn create_inserters(
+    client: &Client,
+    count: i32,
+) -> Result<Vec<SyncInserter<ClickhouseOrlMessage>>> {
+    let mut inserters = Vec::new();
+    for _ in 0..count {
+        let inserter = client
+            .inserter::<ClickhouseOrlMessage>("orl_messages")?
+            .with_max_entries(32_000)
+            .with_max_duration(Duration::from_secs(10));
+        inserters.push(Arc::new(Mutex::new(inserter)));
+    }
+    Ok(inserters)
+}
+
+const STREAM_CHUNK_SIZE: usize = 1_000_000;
 pub async fn files_to_clickhouse(paths: Vec<PathBuf>, channel: &str, url: &str) -> Result<()> {
     let client = Client::default().with_url(url);
 
     init_tables(&client).await?;
 
-    let mut message_inserter = client
-        .inserter::<ClickhouseMessage>("messages")?
-        .with_max_entries(256_000)
-        .with_max_duration(Duration::from_secs(10));
+    let inserters = create_inserters(&client, 10).await?;
 
-    exec_files_to_clickhouse(&mut message_inserter, paths, channel).await?;
-    message_inserter.end().await?;
+    let orl_files = paths
+        .into_iter()
+        .map(|path| OrlDirFile {
+            channel: channel.to_string(),
+            path,
+        })
+        .collect_vec();
+    let mut message_stream =
+        Box::pin(create_message_stream(orl_files)).try_chunks(STREAM_CHUNK_SIZE);
+
+    while let Some(chunk) = message_stream.try_next().await? {
+        split_insert(&inserters, chunk).await?;
+    }
+    // exec_files_to_clickhouse(&inserters, paths, channel).await?;
+    for inserter in inserters {
+        let inserter = Arc::try_unwrap(inserter)
+            .map_err(|_| anyhow!("Failed to unwrap the inserter to close it"))?
+            .into_inner();
+        inserter.end().await?;
+    }
     Ok(())
 }
 
 pub async fn dir_to_clickhouse(dir_path: PathBuf, url: &str) -> Result<()> {
+    let start = Instant::now();
     let orl_files = read_orl_structured_dir(&dir_path).await?;
-    let mut orl_files_grouped = Vec::new();
-    for (key, group) in &orl_files.into_iter().group_by(|of| of.channel.clone()) {
-        let paths: Vec<PathBuf> = group.map(|of| of.path).collect();
-        orl_files_grouped.push((key, paths));
-    }
 
     let client = Client::default().with_url(url);
 
     init_tables(&client).await?;
 
-    let mut message_inserter = client
-        .inserter::<ClickhouseMessage>("messages")?
-        .with_max_entries(16000)
-        .with_max_duration(Duration::from_secs(10));
-    for (channel, paths) in orl_files_grouped {
-        exec_files_to_clickhouse(&mut message_inserter, paths, &channel).await?;
+    let inserters = create_inserters(&client, 10).await?;
+    let mut message_stream =
+        Box::pin(create_message_stream(orl_files)).try_chunks(STREAM_CHUNK_SIZE);
+
+    let mut count = 0;
+    while let Some(chunk) = message_stream.try_next().await? {
+        count += chunk.len();
+        split_insert(&inserters, chunk).await?;
+        let elapsed = start.elapsed();
+        info!(
+            "Currently indexed {} messages after {} ms, {:.2} m/s",
+            count,
+            elapsed.as_millis(),
+            (count as f64 / elapsed.as_millis() as f64) * 1000f64
+        );
     }
-    message_inserter.end().await?;
+
+    for inserter in inserters {
+        let inserter = Arc::try_unwrap(inserter)
+            .map_err(|_| anyhow!("Failed to unwrap the inserter to close it"))?
+            .into_inner();
+        inserter.end().await?;
+    }
+    let elapsed = start.elapsed();
+    info!(
+        "Finished indexing {} messages after {} ms, {:.2} m/s",
+        count,
+        elapsed.as_millis(),
+        (count as f64 / elapsed.as_millis() as f64) * 1000f64
+    );
     Ok(())
 }
 async fn init_tables(client: &Client) -> Result<()> {
-    messages_table::create_messages(client).await?;
+    messages_table::create_orl_messages(client).await?;
     Ok(())
 }
 
-fn orl_log_to_message(orl_log: OrlLog) -> ClickhouseMessage {
-    ClickhouseMessage {
+fn orl_log_to_message(orl_log: OrlLog) -> ClickhouseOrlMessage {
+    ClickhouseOrlMessage {
         ts: orl_log.ts.timestamp_millis(),
         text: orl_log.text,
-        bits: 0,
-        color: "".into(),
-        badges: vec![],
         channel: orl_log.channel,
-        user_id: 0,
         username: orl_log.username,
-        channel_id: 0,
-        subscribed: 0,
-        display_name: "".into(),
     }
 }
-
-/* async fn write_message(inserter: &mut Inserter<ClickhouseMessage>, event: AllEvents) -> Result<()> {
-    if let AllEvents::Twitch(TwitchEvent::Privmsg(msg)) = event {
-        let ch_message: ClickhouseMessage = msg.try_into()?;
-        inserter.write(&ch_message).await?;
-        inserter.commit().await?;
-    }
-    Ok(())
-} */

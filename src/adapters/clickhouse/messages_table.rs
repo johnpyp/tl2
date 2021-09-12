@@ -80,3 +80,33 @@ pub async fn create_messages(client: &Client) -> Result<()> {
 
     Ok(())
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize, Row)]
+pub struct ClickhouseOrlMessage {
+    pub ts: i64,
+    pub channel: String,
+    pub username: String,
+    pub text: String,
+}
+
+pub async fn create_orl_messages(client: &Client) -> Result<()> {
+    client
+        .query(
+            "
+          CREATE TABLE IF NOT EXISTS orl_messages (
+              ts DateTime64(3) CODEC(T64, ZSTD(12)),
+              channel LowCardinality(String),
+              username String CODEC(ZSTD(12)),
+              text String CODEC(ZSTD(14))
+          )
+          ENGINE = ReplacingMergeTree
+          PARTITION BY toYYYYMM(ts)
+          ORDER BY (channel, username, ts, text);",
+        )
+        .execute()
+        .await?;
+
+    debug!("Created clickhouse orl_messages table");
+
+    Ok(())
+}

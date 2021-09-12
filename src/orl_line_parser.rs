@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDateTime, ParseError, TimeZone, Utc};
 use nom::{
-    bytes::complete::{tag, take, take_until, take_until1},
+    bytes::complete::{tag, take, take_until1},
     character::complete::space1,
     combinator::rest,
     error::VerboseError,

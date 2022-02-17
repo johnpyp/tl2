@@ -120,7 +120,7 @@ impl QueuedAppender {
         self.queue.iter().fold(0usize, |sum, (_, v)| sum + v.len())
     }
     async fn write(&mut self, path: PathBuf, line: String) -> std::io::Result<()> {
-        let list = self.queue.entry(path).or_insert_with(|| Vec::new());
+        let list = self.queue.entry(path).or_insert_with(Vec::new);
         list.push(line);
         let queue_len = self.queue_len();
         let time_ready = self.time_ready();
@@ -139,7 +139,7 @@ impl QueuedAppender {
 
     async fn flush(&mut self) -> std::io::Result<()> {
         for (path, list) in &mut self.queue {
-            if list.len() > 0 {
+            if !list.is_empty() {
                 let to_write = list.join("\n") + "\n";
                 let mut file = OpenOptions::new()
                     .create(true)
@@ -156,6 +156,6 @@ impl QueuedAppender {
     }
 
     fn time_ready(&self) -> bool {
-        return self.period <= Instant::now().duration_since(self.last_time);
+        self.period <= Instant::now().duration_since(self.last_time)
     }
 }

@@ -44,7 +44,6 @@ impl ElasticsearchWriter {
             max_retry_seconds: config.max_retry_seconds,
         };
 
-        let alerting = alerting.clone();
         tokio::spawn(async move { worker.work(&alerting).compat().await });
         Ok(ElasticsearchWriter { config, tx })
     }
@@ -155,14 +154,14 @@ impl ElasticsearchWorker {
             .with_context(|| "Error initializing elasticsearch templates")?;
         info!("Initializing ES pipelines");
         if let Some(pipeline) = &self.pipeline {
-            initialize_pipeline(&self.client, &self.index, &pipeline)
+            initialize_pipeline(&self.client, &self.index, pipeline)
                 .await
                 .with_context(|| "Error initializing elasticsearch pipelines")?;
         }
         Ok(())
     }
 
-    async fn process(&mut self, msgs: &Vec<SimpleMessage>) -> Result<()> {
+    async fn process(&mut self, msgs: &[SimpleMessage]) -> Result<()> {
         let mut body: Vec<JsonBody<_>> = Vec::with_capacity(msgs.len() * 2);
         for msg in msgs {
             let msg = msg.normalize();

@@ -27,10 +27,7 @@ impl TryFrom<PrivmsgMessage> for ClickhouseMessage {
     fn try_from(msg: PrivmsgMessage) -> Result<Self> {
         let sub_badge = msg.badge_info.iter().find(|b| b.name == "subscriber");
         let subscribed = if let Some(badge) = sub_badge {
-            match badge.version.parse::<u16>().ok() {
-                Some(count) => count,
-                None => 0,
-            }
+            badge.version.parse::<u16>().ok().unwrap_or(0)
         } else {
             0
         };
@@ -48,7 +45,7 @@ impl TryFrom<PrivmsgMessage> for ClickhouseMessage {
             color: msg
                 .name_color
                 .map(|rgb| format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b))
-                .unwrap_or_else(|| String::new()),
+                .unwrap_or_else(String::new),
         })
     }
 }

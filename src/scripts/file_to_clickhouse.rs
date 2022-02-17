@@ -31,7 +31,7 @@ async fn insert_messages(
     Ok(())
 }
 async fn split_insert(
-    inserters: &Vec<SyncInserter<ClickhouseOrlMessage>>,
+    inserters: &[SyncInserter<ClickhouseOrlMessage>],
     messages: Vec<ClickhouseOrlMessage>,
 ) -> Result<()> {
     let message_count = messages.len();

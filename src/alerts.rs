@@ -71,7 +71,7 @@ impl DiscordAlerting {
             .owner
             .as_ref()
             .map(|owner| format!("<@{}>", owner))
-            .unwrap_or("".to_string());
+            .unwrap_or_default();
         if let Some(url) = &self.config.webhook_url {
             let body = match alert.alert_type {
                 AlertType::Error => {

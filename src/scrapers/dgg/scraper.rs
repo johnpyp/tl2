@@ -30,20 +30,19 @@ impl DggScraper {
         let channel = config.name.clone();
         let endpoint = config.endpoint.clone();
         let origin = config.origin.clone();
-        let use_get_key = config.use_get_key.clone();
         let mut worker = DggWorker {
             tx,
             channel,
             endpoint,
             origin,
-            use_get_key,
+            use_get_key: config.use_get_key,
             failing: false,
             backoff_min: 2,
             backoff_max: max_retry_seconds,
         };
         tokio::spawn(async move { worker.run().await });
-        let scraper = Arc::new(DggScraper { config });
-        scraper
+
+        Arc::new(DggScraper { config })
     }
 }
 
@@ -210,7 +209,7 @@ impl DggWorker {
     async fn fetch_get_key(&self, get_key_url: String) -> Result<String> {
         let response: GetKeyResponse = Client::new().get(get_key_url).send().await?.json().await?;
 
-        return Ok(response.chat_key);
+        Ok(response.chat_key)
     }
 }
 

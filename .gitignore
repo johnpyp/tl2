@@ -15,3 +15,4 @@ config/*_local.yml
 
 .env
 clickhouse-data/
+stack-data/

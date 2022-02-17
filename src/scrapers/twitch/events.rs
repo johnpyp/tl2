@@ -52,15 +52,13 @@ impl From<HostTargetMessage> for SimpleMessageGroup {
 }
 impl From<PrivmsgMessage> for SimpleMessageGroup {
     fn from(msg: PrivmsgMessage) -> Self {
-        let mut messages: Vec<SimpleMessage> = Vec::new();
-
-        messages.push(SimpleMessage {
+        let mut messages = vec![SimpleMessage {
             id: Some(msg.message_id),
             timestamp: msg.server_timestamp,
             channel: msg.channel_login.clone(),
             username: Usernames::Normal(msg.sender.login.clone()),
             text: msg.message_text,
-        });
+        }];
 
         if let Some(bits) = msg.bits {
             messages.push(SimpleMessage {

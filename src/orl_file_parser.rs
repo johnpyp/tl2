@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Context;
@@ -44,7 +45,7 @@ impl OrlLog {
     }
 }
 
-async fn read_file_to_string(path: &PathBuf) -> Result<String> {
+async fn read_file_to_string(path: &Path) -> Result<String> {
     let file = File::open(path).await?;
     let mut buf_reader = BufReader::new(file);
 
@@ -56,7 +57,7 @@ async fn read_file_to_string(path: &PathBuf) -> Result<String> {
 
         let contents = String::from_utf8(decoded)?;
 
-        return Ok(contents.to_string());
+        return Ok(contents);
     }
 
     let mut contents = String::new();
@@ -73,7 +74,7 @@ fn parse_contents_to_logs(contents: String, channel: &str) -> Vec<OrlLog> {
         .collect();
 }
 
-pub async fn read_orl_structured_dir(dir_path: &PathBuf) -> Result<Vec<OrlDirFile>> {
+pub async fn read_orl_structured_dir(dir_path: &Path) -> Result<Vec<OrlDirFile>> {
     let mut res: Vec<OrlDirFile> = Vec::new();
     let mut dir = fs::read_dir(dir_path).await?;
     while let Some(entry) = dir.next_entry().await? {
@@ -114,7 +115,7 @@ pub async fn read_orl_structured_dir(dir_path: &PathBuf) -> Result<Vec<OrlDirFil
     Ok(res)
 }
 pub async fn parse_orl_dir_to_logs(
-    dir_path: &PathBuf,
+    dir_path: &Path,
 ) -> Result<impl Stream<Item = Result<Vec<OrlLog>>>> {
     let orl_dir_files = read_orl_structured_dir(dir_path).await?;
     Ok(try_stream! {
@@ -128,7 +129,7 @@ pub async fn parse_orl_dir_to_logs(
         }
     })
 }
-pub async fn parse_file_to_logs(path: &PathBuf, channel: &str) -> Result<Vec<OrlLog>> {
+pub async fn parse_file_to_logs(path: &Path, channel: &str) -> Result<Vec<OrlLog>> {
     let contents = read_file_to_string(path).await?;
     debug!("Contents length: {:?}", contents.len());
 
@@ -148,19 +149,20 @@ mod tests {
             [2021-08-04 00:44:12.616 UTC] megablade136: !commands
             [2021-08-04 07:01:21.350 UTC] @subscriber: zakwern just subscribed with Prime for 1 months!
         "#;
-        let mut expected = vec![];
-        expected.push(OrlLog {
-            channel: "A_seagull".into(),
-            ts: parse_orl_date("2021-08-04 00:44:12.616 UTC").unwrap(),
-            text: "!commands".into(),
-            username: "megablade136".into(),
-        });
-        expected.push(OrlLog {
-            channel: "A_seagull".into(),
-            ts: parse_orl_date("2021-08-04 07:01:21.350 UTC").unwrap(),
-            text: "zakwern just subscribed with Prime for 1 months!".into(),
-            username: "@subscriber".into(),
-        });
+        let expected = vec![
+            OrlLog {
+                channel: "A_seagull".into(),
+                ts: parse_orl_date("2021-08-04 00:44:12.616 UTC").unwrap(),
+                text: "!commands".into(),
+                username: "megablade136".into(),
+            },
+            OrlLog {
+                channel: "A_seagull".into(),
+                ts: parse_orl_date("2021-08-04 07:01:21.350 UTC").unwrap(),
+                text: "zakwern just subscribed with Prime for 1 months!".into(),
+                username: "@subscriber".into(),
+            },
+        ];
 
         let parsed_logs = parse_contents_to_logs(contents.to_string(), channel);
         assert_eq!(parsed_logs, expected);

@@ -46,7 +46,7 @@ impl ConsoleMetricsWorker {
     }
 
     pub async fn run(&mut self) {
-        while let Some(_) = self.rx.recv().await {
+        while self.rx.recv().await.is_some() {
             self.count += 1;
             let seconds = 30;
             if Instant::now().duration_since(self.last_time) > Duration::from_secs(seconds) {

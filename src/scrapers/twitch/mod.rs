@@ -49,7 +49,6 @@ impl TwitchScraper {
         // otherwise they will back up.
 
         tokio::spawn({
-            let sender = sender.clone();
             async move { TwitchScraper::run_forwarder(incoming_messages, &sender).await }
         });
 

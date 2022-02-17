@@ -39,6 +39,3 @@ tokio-stream = { version = "0.1.7", features = ["sync", "net", "fs", "io-util"] 
 tokio-tungstenite = { version = "0.15.0", features = ["rustls-tls"] }
 twitch-irc = { version = "3.0.1", features = ["transport-ws-rustls-webpki-roots"] }
 voca_rs = "1.13.1"
-
-[profile.release]
-debug = true

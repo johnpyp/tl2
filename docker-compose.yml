@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 services:
   scraper:
@@ -14,6 +14,7 @@ services:
       - ./config:/app/config
       - ${HOST_LOGS_PATH:-./logs}:/app/logs
       - ${HOST_CHANNELS_PATH:-./channels}:/app/channels
+      - ${HOST_SQL_PATH:-./sql}:/app/sql
     tty: true
     init: true
     network_mode: host

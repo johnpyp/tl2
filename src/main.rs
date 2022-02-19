@@ -13,12 +13,13 @@ pub mod run_scrape_ingester;
 pub mod scrapers;
 pub mod scripts;
 pub mod settings;
+pub mod sqlite_pool;
 
-use clap::{Clap, ValueHint};
+use clap::{self, Parser, ValueHint};
 
 use crate::scripts::file_to_clickhouse::{dir_to_clickhouse, files_to_clickhouse};
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "tl2")]
 /// The twitch data stealing toolbox
 enum Opt {

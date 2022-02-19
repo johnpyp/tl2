@@ -5,12 +5,13 @@ use crate::{
     adapters::{
         clickhouse::ClickhouseWriter, console::ConsoleWriter,
         console_metrics::ConsoleMetricsWriter, elasticsearch::ElasticsearchWriter,
-        file::FileWriter, Writer, Writers,
+        file::FileWriter, username_tracker::UsernameTracker, Writer, Writers,
     },
     alerts::DiscordAlerting,
     events::AllEvents,
     scrapers::{dgg::DggScraper, twitch::TwitchScraper},
     settings::Settings,
+    sqlite_pool::create_sqlite,
 };
 
 pub async fn run_ingester() -> Result<(), anyhow::Error> {
@@ -20,7 +21,7 @@ pub async fn run_ingester() -> Result<(), anyhow::Error> {
 
     let alerting = DiscordAlerting::new(settings.discord_alerting);
 
-    alerting.info(&"Starting TL2");
+    alerting.info("Starting TL2");
     let mut writers: Vec<Option<Writers>> = Vec::new();
     if settings.writers.elasticsearch.enabled {
         writers.push(Some(
@@ -41,6 +42,13 @@ pub async fn run_ingester() -> Result<(), anyhow::Error> {
     if settings.writers.clickhouse.enabled {
         writers.push(Some(
             ClickhouseWriter::new(settings.writers.clickhouse, alerting.clone()).into(),
+        ))
+    }
+
+    if settings.writers.username_tracker.enabled {
+        let sqlite = create_sqlite(&settings.writers.username_tracker.sqlite_path).await?;
+        writers.push(Some(
+            UsernameTracker::new(settings.writers.username_tracker, sqlite).into(),
         ))
     }
 

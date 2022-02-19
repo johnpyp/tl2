@@ -36,10 +36,10 @@ mod tests {
 
         assert_eq!(names.connection_count, 30);
         assert_eq!(names.users.len(), 2);
-        assert_eq!(names.users.get(0).unwrap().is_subscriber, true);
         assert_eq!(names.users.get(0).unwrap().username, "pogchamp");
-        assert_eq!(names.users.get(1).unwrap().is_subscriber, true);
-        assert_eq!(names.users.get(1).unwrap().is_admin, true);
-        assert_eq!(names.users.get(1).unwrap().is_moderator, false);
+        assert!(names.users.get(0).unwrap().is_subscriber);
+        assert!(names.users.get(1).unwrap().is_subscriber);
+        assert!(names.users.get(1).unwrap().is_admin);
+        assert!(names.users.get(1).unwrap().is_moderator);
     }
 }

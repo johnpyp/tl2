@@ -1,26 +1,20 @@
-FROM rustlang/rust:nightly as planner
-WORKDIR app
-# We only pay the installation cost once, 
-# it will be cached from the second build onwards
-RUN cargo install cargo-chef 
+FROM lukemathwalker/cargo-chef:latest-rust-1.58.1 AS chef
+WORKDIR /app
+
+FROM chef AS planner
 COPY . .
 RUN cargo chef prepare  --recipe-path recipe.json
 
-FROM rustlang/rust:nightly as cacher
-WORKDIR app
-RUN cargo install cargo-chef
+FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
+# Build dependencies - this is the caching Docker layer!
 RUN cargo chef cook --release --recipe-path recipe.json
-
-FROM rustlang/rust:nightly as builder
-WORKDIR app
+# Build application
 COPY . .
-# Copy over the cached dependencies
-COPY --from=cacher /app/target target
-COPY --from=cacher $CARGO_HOME $CARGO_HOME
 RUN cargo build --release --bin tl2
 
-FROM rustlang/rust:nightly as runtime
+# We do not need the Rust toolchain to run the binary!
+FROM rust:1.58.1-buster AS runtime
 
 ARG UNAME=appuser
 ARG UID=1000
@@ -34,7 +28,6 @@ RUN useradd -m -u $UID -g $GID -o -s /bin/bash $UNAME
 COPY --from=builder /app/target/release/tl2 /app/app-bin
 
 RUN chown -R $UNAME:$UNAME /app
-
 USER $UNAME
 
-CMD ["/app/app-bin", "scrape"]
+ENTRYPOINT ["/app/app-bin"]

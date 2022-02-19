@@ -45,12 +45,19 @@ pub struct FileSettings {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct UsernameTrackerSettings {
+    pub enabled: bool,
+    pub sqlite_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct WritersSettings {
     pub elasticsearch: ElasticsearchSettings,
     pub clickhouse: ClickhouseSettings,
     pub filesystem: FileSettings,
     pub console: ConsoleSettings,
     pub console_metrics: ConsoleMetricsSettings,
+    pub username_tracker: UsernameTrackerSettings,
 }
 
 #[derive(Clone, Debug, Deserialize)]

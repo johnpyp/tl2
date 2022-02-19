@@ -48,6 +48,7 @@ pub struct FileSettings {
 pub struct UsernameTrackerSettings {
     pub enabled: bool,
     pub sqlite_path: String,
+    pub batch_size: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]

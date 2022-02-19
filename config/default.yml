@@ -41,3 +41,4 @@ writers:
   username_tracker:
     enabled: false
     sqlite_path: "./data/sql/main.db"
+    batch_size: 100

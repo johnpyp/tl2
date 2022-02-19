@@ -43,7 +43,6 @@ struct UsernameUpdateEvent {
 }
 
 struct UsernameWorker {
-    flush_threshold: usize,
     sqlite: SqlitePool,
     config: Arc<UsernameTrackerSettings>,
     rx: UnboundedReceiver<TwitchEvent>,
@@ -54,12 +53,7 @@ impl UsernameWorker {
         rx: UnboundedReceiver<TwitchEvent>,
         sqlite: SqlitePool,
     ) {
-        let worker = UsernameWorker {
-            flush_threshold: 50,
-            config,
-            rx,
-            sqlite,
-        };
+        let worker = UsernameWorker { config, rx, sqlite };
         tokio::spawn(worker.run());
     }
     async fn run(mut self) {
@@ -75,7 +69,8 @@ impl UsernameWorker {
             let mut new_update_events = self.get_username_updates(evt);
             updates_queue.append(&mut new_update_events);
 
-            if updates_queue.len() >= self.flush_threshold {
+            let batch_size = self.config.batch_size as usize;
+            if updates_queue.len() >= batch_size {
                 if let Err(error) = self.process(&updates_queue).await {
                     error!("Error writing usernames to disk: {:?}", error);
                 } else {
@@ -83,13 +78,13 @@ impl UsernameWorker {
                 }
             }
 
-            if updates_queue.len() >= self.flush_threshold * 10 {
+            if updates_queue.len() >= batch_size * 10 {
                 error!(
                     "Update queue backed up to {} items! Removing {} old items",
                     updates_queue.len(),
-                    self.flush_threshold
+                    batch_size
                 );
-                updates_queue.drain(0..self.flush_threshold);
+                updates_queue.drain(0..batch_size);
             }
         }
     }

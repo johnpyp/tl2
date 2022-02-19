@@ -14,7 +14,7 @@ COPY . .
 RUN cargo build --release --bin tl2
 
 # We do not need the Rust toolchain to run the binary!
-FROM rust:1.58.1-buster AS runtime
+FROM rust:1.58.1 AS runtime
 
 ARG UNAME=appuser
 ARG UID=1000
@@ -30,4 +30,4 @@ COPY --from=builder /app/target/release/tl2 /app/app-bin
 RUN chown -R $UNAME:$UNAME /app
 USER $UNAME
 
-ENTRYPOINT ["/app/app-bin"]
+ENTRYPOINT ["/app/app-bin", "scrape"]

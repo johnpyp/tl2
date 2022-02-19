@@ -2,3 +2,7 @@
 writers:
   elasticsearch:
     enabled: false
+  username_tracker:
+    enabled: true
+  filesystem:
+    enabled: true

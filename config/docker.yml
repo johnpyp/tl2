@@ -6,3 +6,5 @@ twitch:
 writers:
   filesystem:
     path: "/app/logs"
+  username_tracker:
+    sqlite_path: "/app/sql/main.db"

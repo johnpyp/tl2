@@ -20,7 +20,7 @@ dgg_like:
       use_get_key: false
 writers:
   elasticsearch:
-    enabled: true
+    enabled: false
     host: http://localhost
     port: "9200"
     index: rustlesearch
@@ -32,9 +32,12 @@ writers:
     enabled: false
     url: "http://localhost:8123"
   filesystem:
-    enabled: true
+    enabled: false
     path: "./logs"
   console:
     enabled: false
   console_metrics:
     enabled: true
+  username_tracker:
+    enabled: false
+    sqlite_path: "./data/sql/main.db"

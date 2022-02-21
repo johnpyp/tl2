@@ -1,3 +1,4 @@
+-- Show all name-changed ids
 SELECT 
   *
 FROM name_changes nc

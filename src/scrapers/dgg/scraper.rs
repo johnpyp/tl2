@@ -101,7 +101,12 @@ impl DggWorker {
                     return WorkerCommands::Reconnect;
                 }
             };
-            endpoint = key_res.chat_url.unwrap_or(endpoint) + "/" + &key_res.chat_key;
+            let base_endpoint = key_res
+                .chat_url
+                .map(|new_chat_url| format!("wss://{}", new_chat_url))
+                .unwrap_or(endpoint);
+
+            endpoint = base_endpoint + "/" + &key_res.chat_key;
         }
         let mut request = Request::builder().uri(endpoint);
         request = request.header("Origin", &self.origin);

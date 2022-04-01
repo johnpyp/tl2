@@ -94,14 +94,14 @@ impl DggWorker {
         let mut endpoint = self.endpoint.to_owned();
         if self.use_get_key {
             let get_key_url = self.origin.clone() + "/api/chat/getkey";
-            let chat_key = match self.fetch_get_key(get_key_url.clone()).await {
+            let key_res = match self.fetch_get_key(get_key_url.clone()).await {
                 Ok(v) => v,
                 Err(err) => {
                     error!("Error fetching key for '{}': {:?}", get_key_url, err);
                     return WorkerCommands::Reconnect;
                 }
             };
-            endpoint = endpoint.to_owned() + "/" + &chat_key;
+            endpoint = key_res.chat_url.unwrap_or(endpoint) + "/" + &key_res.chat_key;
         }
         let mut request = Request::builder().uri(endpoint);
         request = request.header("Origin", &self.origin);
@@ -206,10 +206,10 @@ impl DggWorker {
         }
     }
 
-    async fn fetch_get_key(&self, get_key_url: String) -> Result<String> {
+    async fn fetch_get_key(&self, get_key_url: String) -> Result<GetKeyResponse> {
         let response: GetKeyResponse = Client::new().get(get_key_url).send().await?.json().await?;
 
-        Ok(response.chat_key)
+        Ok(response)
     }
 }
 
@@ -217,4 +217,6 @@ impl DggWorker {
 struct GetKeyResponse {
     #[serde(rename = "chatKey")]
     chat_key: String,
+    #[serde(rename = "chatURL")]
+    chat_url: Option<String>,
 }

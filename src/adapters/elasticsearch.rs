@@ -207,7 +207,7 @@ impl ElasticsearchWorker {
 pub fn create_elasticsearch_client(host: &str, port: u32) -> Result<Elasticsearch> {
     let url = format!("{}:{}", host, port);
 
-    return create_elasticsearch_client_from_url(url);
+    create_elasticsearch_client_from_url(url)
 }
 
 pub fn create_elasticsearch_client_from_url(url: String) -> Result<Elasticsearch> {
@@ -237,7 +237,7 @@ pub async fn initialize_template(client: &Elasticsearch, index: &str) -> Result<
           "settings": {
             "number_of_replicas": 0,
             "number_of_shards": 1,
-            "refresh_interval": "1s",
+            "refresh_interval": "10s",
             "sort.field": ["ts", "ts"],
             "sort.order": ["desc", "asc"],
             "codec": "best_compression",

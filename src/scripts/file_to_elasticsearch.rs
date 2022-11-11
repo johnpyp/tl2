@@ -82,7 +82,15 @@ pub async fn write_elastic_chunk(
         let msg = msg.normalize();
         let username = msg.username.to_string();
         let ts = msg.ts.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        body.push(json!({ "index": { "_index": index }}).into());
+
+        // 2020-12-12 - 10 characters for ymd of an ISO date
+        let ymd = &ts[..10];
+
+        let index_with_date = index.to_string() + ymd;
+
+        let id = msg.channel.clone() + &msg.username + &ts;
+
+        body.push(json!({ "index": { "_index": &index_with_date , "_id": id}}).into());
         body.push(
             json!({
                 "channel": msg.channel,
@@ -93,14 +101,21 @@ pub async fn write_elastic_chunk(
             .into(),
         );
     }
-    let mut req = client.bulk(BulkParts::Index(&index));
+    let mut req = client.bulk(BulkParts::Index("non-index-placeholder"));
     if let Some(pipeline) = &pipeline {
         req = req.pipeline(pipeline)
     }
-    let response = req.body(body).send().await?.error_for_status_code()?;
+    let response = req.body(body).send().await?;
 
     let response_body = response.json::<Value>().await?;
 
+    if let Some(request_level_error) = response_body.get("error") {
+        let error_reason = request_level_error["reason"].as_str().unwrap();
+        bail!(
+            "Bulk request failed for request-level error: '{}'",
+            error_reason
+        );
+    }
     let has_errors = response_body["errors"].as_bool().unwrap();
     if has_errors {
         let reason = response_body["items"][0]["index"]["error"]["reason"].as_str();
@@ -146,9 +161,9 @@ pub async fn write_elastic_chunk(
 // const WORKER_COUNT: usize = 24;
 pub async fn dir_to_elasticsearch(dir_path: PathBuf, url: &str, index: &str) -> Result<()> {
     let worker_count: usize =
-        env::var("TL2_WORKER_COUNT").map_or_else(|_| 32, |s| s.parse::<usize>().unwrap());
+        env::var("TL2_WORKER_COUNT").map_or_else(|_| 16, |s| s.parse::<usize>().unwrap());
     let elastic_stream_chunk_size: usize = env::var("TL2_ELASTIC_STREAM_CHUNK_SIZE")
-        .map_or_else(|_| 32_000, |s| s.parse::<usize>().unwrap());
+        .map_or_else(|_| 2_000, |s| s.parse::<usize>().unwrap());
 
     let start = Instant::now();
     let orl_files = read_orl_structured_dir(&dir_path).await?;
@@ -217,27 +232,27 @@ pub async fn dir_to_elasticsearch(dir_path: PathBuf, url: &str, index: &str) -> 
                 };
                 let start_time = Instant::now();
                 let chunk_len = chunk.len();
-                if write_elastic_chunk(&client, chunk, &index, None)
-                    .await
-                    .is_ok()
-                {
-                    let elapsed = start_time.elapsed();
-                    count.fetch_add(chunk_len, std::sync::atomic::Ordering::Relaxed);
-                    debug!(
-                        "[worker {}] Finished indexing {} messages in {:.2}ms",
-                        i,
-                        chunk_len,
-                        elapsed.as_millis()
-                    );
-                } else {
-                    warn!("[worker {}] Index failed for {} messages", i, chunk_len);
+
+                let write_result = write_elastic_chunk(&client, chunk, &index, None).await;
+
+                match write_result {
+                    Ok(_) => {
+                        let elapsed = start_time.elapsed();
+                        count.fetch_add(chunk_len, std::sync::atomic::Ordering::Relaxed);
+                        debug!(
+                            "[worker {}] Finished indexing {} messages in {:.2}ms",
+                            i,
+                            chunk_len,
+                            elapsed.as_millis()
+                        );
+                    }
+                    Err(e) => {
+                        warn!(
+                            "[worker {}] Index failed for {} messages. Error: {:?}",
+                            i, chunk_len, e
+                        );
+                    }
                 }
-                // info!(
-                //     "Currently indexed {} messages after {} ms, {:.2} msg/s",
-                //     count,
-                //     elapsed.as_millis(),
-                //     (count as f64 / elapsed.as_millis() as f64) * 1000f64
-                // );
             }
         });
         futures.push(handle);

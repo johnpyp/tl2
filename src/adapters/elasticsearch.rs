@@ -204,16 +204,20 @@ impl ElasticsearchWorker {
     }
 }
 
-fn create_elasticsearch_client(host: &str, port: u32) -> Result<Elasticsearch> {
+pub fn create_elasticsearch_client(host: &str, port: u32) -> Result<Elasticsearch> {
     let url = format!("{}:{}", host, port);
 
+    return create_elasticsearch_client_from_url(url);
+}
+
+pub fn create_elasticsearch_client_from_url(url: String) -> Result<Elasticsearch> {
     let transport =
         Transport::single_node(&url).with_context(|| "Building elasticsearch url failed")?;
     let client = Elasticsearch::new(transport);
     Ok(client)
 }
 
-async fn initialize_template(client: &Elasticsearch, index: &str) -> Result<()> {
+pub async fn initialize_template(client: &Elasticsearch, index: &str) -> Result<()> {
     let exception = client
         .indices()
         .put_template(IndicesPutTemplateParts::Name(&format!(
@@ -253,7 +257,11 @@ async fn initialize_template(client: &Elasticsearch, index: &str) -> Result<()> 
     Ok(())
 }
 
-async fn initialize_pipeline(client: &Elasticsearch, index: &str, pipeline: &str) -> Result<()> {
+pub async fn initialize_pipeline(
+    client: &Elasticsearch,
+    index: &str,
+    pipeline: &str,
+) -> Result<()> {
     let exception = client
         .ingest()
         .put_pipeline(IngestPutPipelineParts::Id(pipeline))

@@ -18,6 +18,7 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::io::BufReader;
 use tokio_stream::wrappers::ReadDirStream;
+use voca_rs::case;
 
 use crate::orl_line_parser::{parse_orl_line, RawOrlLog};
 
@@ -41,6 +42,15 @@ impl OrlLog {
             ts: raw.ts,
             username: raw.username,
             text: raw.text,
+        }
+    }
+
+    pub fn normalize(&self) -> OrlLog {
+        OrlLog {
+            ts: self.ts,
+            username: self.username.to_lowercase(),
+            text: self.text.trim().replace("\n", " "),
+            channel: case::capitalize(self.channel.trim(), true),
         }
     }
 }

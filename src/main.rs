@@ -17,7 +17,10 @@ pub mod sqlite_pool;
 
 use clap::{self, Parser, ValueHint};
 
-use crate::scripts::file_to_clickhouse::{dir_to_clickhouse, files_to_clickhouse};
+use crate::scripts::{
+    file_to_clickhouse::{dir_to_clickhouse, files_to_clickhouse},
+    file_to_elasticsearch::dir_to_elasticsearch,
+};
 
 #[derive(Parser, Debug)]
 #[clap(name = "tl2")]
@@ -66,6 +69,20 @@ enum Opt {
         #[clap(short, long, default_value = "http://localhost:8123")]
         url: String,
     },
+
+    DirToElasticsearch {
+        /// Directory with file structure: <root>/<Channel name>/<YYYY-MM-DD>.txt(.gz)
+        #[clap(value_hint = ValueHint::DirPath)]
+        directory: PathBuf,
+
+        /// Elasticsearch database url
+        #[clap(short, long, required = true)]
+        url: String,
+
+        /// Elasticsearch index
+        #[clap(short, long, required = true)]
+        index: String,
+    },
 }
 #[tokio::main]
 async fn main() {
@@ -94,6 +111,19 @@ async fn main() {
             info!("Input Files: {:?}", files);
             info!("Clickhouse Url: {:?}", url);
             if let Err(e) = files_to_clickhouse(files, &channel, &url).await {
+                error!("{:?}", e);
+            }
+        }
+        Opt::DirToElasticsearch {
+            directory,
+            url,
+            index,
+        } => {
+            info!("Directory: {:?}", directory);
+            info!("Elasticsearch Url: {:?}", url);
+            info!("Index: {:?}", index);
+
+            if let Err(e) = dir_to_elasticsearch(directory, &url, &index).await {
                 error!("{:?}", e);
             }
         }

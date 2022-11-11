@@ -10,6 +10,7 @@ edition = "2021"
 anyhow = "1.0.43"
 async-compression = { version = "0.3.8", features = ["futures-io", "tokio", "gzip"] }
 async-stream = "0.3.2"
+async-channel = "1.7.1"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "3.1", features = ["derive", "wrap_help"] }
 clickhouse = "0.9"

@@ -84,11 +84,11 @@ pub async fn write_elastic_chunk(
         let ts = msg.ts.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         // 2020-12-12 - 10 characters for ymd of an ISO date
-        let ymd = &ts[..10];
+        let ymd_first_of_mo = ts[..7].to_string() + "-01";
 
-        let index_with_date = index.to_string() + ymd;
+        let index_with_date = index.to_string() + "-" + &ymd_first_of_mo;
 
-        let id = msg.channel.clone() + &msg.username + &ts;
+        let id = msg.channel.clone() + "-" + &msg.username + "-" + &ts;
 
         body.push(json!({ "index": { "_index": &index_with_date , "_id": id}}).into());
         body.push(

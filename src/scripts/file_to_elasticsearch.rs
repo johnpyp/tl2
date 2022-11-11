@@ -1,24 +1,27 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-use std::{path::PathBuf, time::Instant};
+use std::{
+    env,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
 
 use anyhow::{bail, Context, Result};
+use async_channel::Receiver;
 use async_stream::try_stream;
-
 use elasticsearch::{http::request::JsonBody, BulkParts, Elasticsearch};
-use futures::future::{join_all, select, try_join_all};
-use futures::TryStreamExt;
-use futures::{select, Stream};
-use log::error;
+use futures::{
+    future::{join_all, select},
+    Stream, TryStreamExt,
+};
 use log::{debug, info, warn};
 use serde_json::{json, Value};
 use tokio::time;
-use twitch_irc::message;
 
-use crate::adapters::elasticsearch::create_elasticsearch_client_from_url;
 use crate::{
-    adapters::elasticsearch::initialize_template,
+    adapters::elasticsearch::{create_elasticsearch_client_from_url, initialize_template},
     orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlDirFile, OrlLog},
 };
 
@@ -29,6 +32,23 @@ fn create_message_stream(orl_files: Vec<OrlDirFile>) -> impl Stream<Item = Resul
             let logs = parse_file_to_logs(&file.path, &file.channel).await?;
             for message in logs {
                 yield message;
+            }
+        }
+    }
+}
+
+fn create_message_stream_recv(
+    orl_files_receiver: Receiver<Vec<OrlDirFile>>,
+) -> impl Stream<Item = Result<OrlLog>> {
+    try_stream! {
+        while let Ok(orl_files) = orl_files_receiver.recv().await {
+            info!("{}", orl_files.len());
+            for file in orl_files {
+                debug!("Processing file: {:?}", file.path);
+                let logs = parse_file_to_logs(&file.path, &file.channel).await?;
+                for message in logs {
+                    yield message;
+                }
             }
         }
     }
@@ -93,7 +113,6 @@ pub async fn write_elastic_chunk(
     Ok(())
 }
 
-const ELASTIC_STREAM_CHUNK_SIZE: usize = 64_000;
 // pub async fn files_to_clickhouse(paths: Vec<PathBuf>, channel: &str, url: &str) -> Result<()> {
 //     let client = Client::default().with_url(url);
 
@@ -124,7 +143,13 @@ const ELASTIC_STREAM_CHUNK_SIZE: usize = 64_000;
 //     Ok(())
 // }
 
+// const WORKER_COUNT: usize = 24;
 pub async fn dir_to_elasticsearch(dir_path: PathBuf, url: &str, index: &str) -> Result<()> {
+    let worker_count: usize =
+        env::var("TL2_WORKER_COUNT").map_or_else(|_| 32, |s| s.parse::<usize>().unwrap());
+    let elastic_stream_chunk_size: usize = env::var("TL2_ELASTIC_STREAM_CHUNK_SIZE")
+        .map_or_else(|_| 32_000, |s| s.parse::<usize>().unwrap());
+
     let start = Instant::now();
     let orl_files = read_orl_structured_dir(&dir_path).await?;
 
@@ -134,45 +159,62 @@ pub async fn dir_to_elasticsearch(dir_path: PathBuf, url: &str, index: &str) -> 
         .await
         .with_context(|| "Error initializing elasticsearch templates")?;
 
-    let mut message_stream =
-        Box::pin(create_message_stream(orl_files)).try_chunks(ELASTIC_STREAM_CHUNK_SIZE);
-
-    let (sender, receiver) = async_channel::bounded::<Vec<OrlLog>>(5);
+    // let mut message_stream =
+    //     Box::pin(create_message_stream(orl_files)).try_chunks(ELASTIC_STREAM_CHUNK_SIZE);
 
     let count = Arc::new(AtomicUsize::new(0));
     let mut futures = vec![];
 
-    let handle = tokio::spawn(async move {
-        loop {
-            let chunk = match message_stream.try_next().await {
-                Ok(x) => match x {
-                    Some(v) => v,
-                    _ => return,
-                },
-                Err(e) => {
-                    error!("Message stream broke: {:?}", e);
-                    return;
-                }
-            };
-            sender.send(chunk).await.unwrap();
-            // info!(
-            //     "Currently indexed {} messages after {} ms, {:.2} msg/s",
-            //     count,
-            //     elapsed.as_millis(),
-            //     (count as f64 / elapsed.as_millis() as f64) * 1000f64
-            // );
-        }
-    });
-    futures.push(handle);
+    // let handle = tokio::spawn(async move {
+    //     loop {
+    //         let chunk = match message_stream.try_next().await {
+    //             Ok(x) => match x {
+    //                 Some(v) => v,
+    //                 _ => return,
+    //             },
+    //             Err(e) => {
+    //                 error!("Message stream broke: {:?}", e);
+    //                 return;
+    //             }
+    //         };
+    //         sender.send(chunk).await.unwrap();
+    //         // info!(
+    //         //     "Currently indexed {} messages after {} ms, {:.2} msg/s",
+    //         //     count,
+    //         //     elapsed.as_millis(),
+    //         //     (count as f64 / elapsed.as_millis() as f64) * 1000f64
+    //         // );
+    //     }
+    // });
+    // futures.push(handle);
 
-    for i in 0..10 {
+    let (sender, receiver) = async_channel::unbounded::<Vec<OrlDirFile>>();
+
+    let file_chunks = orl_files.chunks(10).collect::<Vec<_>>();
+    for file_chunk in file_chunks {
+        sender.send(file_chunk.to_vec()).await.unwrap();
+    }
+    sender.close();
+
+    for i in 0..worker_count {
         let index = index.to_owned();
         let receiver = receiver.clone();
         let client = client.clone();
         info!("Spawning index worker [{}]", i);
         let count = count.clone();
+
+        // let orl_files = file_chunks
+        //     .get(i)
+        //     .expect("Index should be in len of file chunks")
+        //     .to_vec();
         let handle = tokio::spawn(async move {
-            while let Ok(chunk) = receiver.recv().await {
+            let mut message_stream = Box::pin(create_message_stream_recv(receiver))
+                .try_chunks(elastic_stream_chunk_size);
+            while let Ok(chunk) = message_stream.try_next().await {
+                let chunk = match chunk {
+                    Some(x) => x,
+                    _ => break,
+                };
                 let start_time = Instant::now();
                 let chunk_len = chunk.len();
                 if write_elastic_chunk(&client, chunk, &index, None)

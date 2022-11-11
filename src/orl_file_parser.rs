@@ -30,6 +30,7 @@ pub struct OrlLog {
     pub channel: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OrlDirFile {
     pub path: PathBuf,
     pub channel: String,

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use async_compression::tokio::bufread::GzipDecoder;
+use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZstdDecoder};
 use async_trait::async_trait;
 use futures::{future, stream, Stream, StreamExt, TryStreamExt};
 use log::warn;
@@ -11,14 +11,11 @@ use std::{
 };
 use tokio::{
     fs::{self, File},
-    io::{AsyncReadExt, BufReader},
+    io::{AsyncBufRead, AsyncRead, AsyncReadExt, BufReader},
 };
 use tokio_stream::wrappers::ReadDirStream;
 
-use crate::{
-    formats::unified::{OrlLog1_0},
-    sinks::Sink,
-};
+use crate::{formats::unified::OrlLog1_0, sinks::Sink};
 
 use super::Source;
 
@@ -97,20 +94,37 @@ impl JsonFileSource {
         let file = File::open(path).await?;
         let mut buf_reader = BufReader::new(file);
 
-        let gz_ext = OsStr::new("gz");
-        if path.extension() == Some(gz_ext) {
+        let decoded = JsonFileSource::read_to_vec(path.extension(), &mut buf_reader).await?;
+        let contents = String::from_utf8(decoded)?;
+
+        Ok(contents)
+    }
+
+    async fn read_to_vec(ext: Option<&OsStr>, buf_reader: &mut BufReader<File>) -> Result<Vec<u8>> {
+        let mut decoded: Vec<u8> = vec![];
+
+        let ext = ext.unwrap_or_else(|| OsStr::new("txt"));
+
+        if ext == OsStr::new("gz") {
             let mut reader = GzipDecoder::new(buf_reader);
-            let mut decoded: Vec<u8> = vec![];
             reader.read_to_end(&mut decoded).await?;
-
-            let contents = String::from_utf8(decoded)?;
-
-            return Ok(contents);
+            return Ok(decoded);
         }
 
-        let mut contents = String::new();
-        buf_reader.read_to_string(&mut contents).await?;
-        Ok(contents)
+        if ext == OsStr::new("zst") {
+            let mut reader = ZstdDecoder::new(buf_reader);
+            reader.read_to_end(&mut decoded).await?;
+            return Ok(decoded);
+        }
+
+        if ext == OsStr::new("br") {
+            let mut reader = BrotliDecoder::new(buf_reader);
+            reader.read_to_end(&mut decoded).await?;
+            return Ok(decoded);
+        }
+
+        buf_reader.read_to_end(&mut decoded).await?;
+        Ok(decoded)
     }
 
     async fn create_json_target_stream(

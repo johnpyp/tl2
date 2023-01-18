@@ -9,7 +9,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.43"
 async-channel = "1.7.1"
-async-compression = { version = "0.3.8", features = ["futures-io", "tokio", "gzip"] }
+async-compression = { version = "0.3.8", features = ["futures-io", "tokio", "gzip", "zstd", "brotli"] }
 async-stream = "0.3.2"
 async-trait = "0.1.61"
 avro-rs = "0.13.0"

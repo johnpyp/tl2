@@ -123,7 +123,7 @@ impl Sink<Result<OrlLog1_0>> for ElasticsearchBulkSink {
 
         let sink = Arc::new(self);
 
-        let (mut sender, receiver) = mpsc::channel::<Vec<OrlLog1_0>>(100_000);
+        let (mut sender, receiver) = mpsc::channel::<Vec<OrlLog1_0>>(500);
 
         // {
 
@@ -144,7 +144,7 @@ impl Sink<Result<OrlLog1_0>> for ElasticsearchBulkSink {
                 return future::ready(Some(Ok(result)));
             }
             warn!("Error from chunks: {:?}", result);
-            return future::ready(None);
+            future::ready(None)
         });
         let flush_to_stream_fut = sender.send_all(&mut chunked_stream);
         // let orig_chunk_stream = {

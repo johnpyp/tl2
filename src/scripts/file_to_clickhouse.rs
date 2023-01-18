@@ -15,7 +15,8 @@ use tokio::{spawn, sync::Mutex};
 
 use crate::{
     adapters::clickhouse::messages_table::{self, ClickhouseOrlMessage},
-    orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlDirFile, OrlLog},
+    formats::orl::OrlLog,
+    sources::orl::orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlDirFile},
 };
 
 type SyncInserter<T> = Arc<Mutex<Inserter<T>>>;
@@ -72,7 +73,7 @@ async fn create_inserters(
         let inserter = client
             .inserter::<ClickhouseOrlMessage>("orl_messages")?
             .with_max_entries(32_000)
-            .with_max_duration(Duration::from_secs(10));
+            .with_period(Some(Duration::from_secs(10)));
         inserters.push(Arc::new(Mutex::new(inserter)));
     }
     Ok(inserters)

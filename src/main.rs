@@ -7,15 +7,17 @@ use run_scrape_ingester::run_ingester;
 pub mod adapters;
 pub mod alerts;
 pub mod events;
-pub mod orl_file_parser;
-pub mod orl_line_parser;
+pub mod formats;
 pub mod run_scrape_ingester;
 pub mod scrapers;
 pub mod scripts;
 pub mod settings;
+pub mod sinks;
+pub mod sources;
 pub mod sqlite_pool;
 
 use clap::{self, Parser, ValueHint};
+use scripts::file_to_sqlite::dir_to_sqlite;
 
 use crate::scripts::{
     file_to_clickhouse::{dir_to_clickhouse, files_to_clickhouse},
@@ -83,6 +85,40 @@ enum Opt {
         #[clap(short, long, required = true)]
         index: String,
     },
+
+    DirToSqlite {
+        /// Directory with file structure: <root>/<Channel name>/<YYYY-MM-DD>.txt(.gz)
+        #[clap(value_hint = ValueHint::DirPath)]
+        directory: PathBuf,
+    },
+    DirToJsonl {
+        /// Directory with file structure: <root>/<Channel name>/<YYYY-MM-DD>.txt(.gz)
+        #[clap(value_hint = ValueHint::DirPath)]
+        directory: PathBuf,
+
+        /// Output directory to store processed files
+        #[clap(value_hint = ValueHint::DirPath)]
+        output_directory: PathBuf,
+    },
+
+    JsonlToConsole {
+        /// Directory with file structure: <root>/<Channel name>/<YYYY-MM-DD>.jsonl(.gz|.br)
+        #[clap(value_hint = ValueHint::DirPath)]
+        directory: PathBuf,
+    },
+    JsonlToElasticsearch {
+        /// Directory with file structure: <root>/<Channel name>/<YYYY-MM-DD>.jsonl(.gz|.br)
+        #[clap(value_hint = ValueHint::DirPath)]
+        directory: PathBuf,
+
+        /// Elasticsearch database url
+        #[clap(short, long, required = true)]
+        url: String,
+
+        /// Elasticsearch index
+        #[clap(short, long, required = true)]
+        index: String,
+    },
 }
 #[tokio::main]
 async fn main() {
@@ -124,6 +160,44 @@ async fn main() {
             info!("Index: {:?}", index);
 
             if let Err(e) = dir_to_elasticsearch(directory, &url, &index).await {
+                error!("{:?}", e);
+            }
+        }
+        Opt::DirToSqlite { directory } => {
+            info!("Directory: {:?}", directory);
+
+            if let Err(e) = dir_to_sqlite(directory).await {
+                error!("{:?}", e);
+            }
+        }
+        Opt::DirToJsonl {
+            directory,
+            output_directory,
+        } => {
+            info!("Directory: {:?}", directory);
+            info!("Output directory: {:?}", output_directory);
+
+            if let Err(e) = scripts::dir_to_jsonl(directory, output_directory).await {
+                error!("{:?}", e);
+            }
+        }
+        Opt::JsonlToConsole { directory } => {
+            info!("Directory: {:?}", directory);
+
+            if let Err(e) = scripts::jsonl_to_console(directory).await {
+                error!("{:?}", e);
+            }
+        }
+        Opt::JsonlToElasticsearch {
+            directory,
+            url,
+            index,
+        } => {
+            info!("Directory: {:?}", directory);
+            info!("Elasticsearch Url: {:?}", url);
+            info!("Elasticsearch Index: {:?}", index);
+
+            if let Err(e) = scripts::jsonl_to_elasticsearch(directory, url, index).await {
                 error!("{:?}", e);
             }
         }

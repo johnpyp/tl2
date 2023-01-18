@@ -22,27 +22,15 @@ use tokio::time;
 
 use crate::{
     adapters::elasticsearch::{create_elasticsearch_client_from_url, initialize_template},
-    orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlDirFile, OrlLog},
+    formats::orl::OrlLog,
+    sources::orl::orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlDirFile},
 };
-
-fn create_message_stream(orl_files: Vec<OrlDirFile>) -> impl Stream<Item = Result<OrlLog>> {
-    try_stream! {
-        for file in orl_files {
-            debug!("Processing file: {:?}", file.path);
-            let logs = parse_file_to_logs(&file.path, &file.channel).await?;
-            for message in logs {
-                yield message;
-            }
-        }
-    }
-}
 
 fn create_message_stream_recv(
     orl_files_receiver: Receiver<Vec<OrlDirFile>>,
 ) -> impl Stream<Item = Result<OrlLog>> {
     try_stream! {
         while let Ok(orl_files) = orl_files_receiver.recv().await {
-            info!("{}", orl_files.len());
             for file in orl_files {
                 debug!("Processing file: {:?}", file.path);
                 let logs = parse_file_to_logs(&file.path, &file.channel).await?;

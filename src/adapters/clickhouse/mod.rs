@@ -65,11 +65,11 @@ impl ClickhouseWorker {
         let mut message_inserter = client
             .inserter::<ClickhouseMessage>("messages")?
             .with_max_entries(100)
-            .with_max_duration(Duration::from_secs(5));
+            .with_period(Some(Duration::from_secs(5)));
         let mut user_notice_inserter = client
             .inserter::<ClickhouseUserNotice>("usernotices")?
             .with_max_entries(100)
-            .with_max_duration(Duration::from_secs(5));
+            .with_period(Some(Duration::from_secs(5)));
         while let Some(event) = self.rx.recv().await {
             ClickhouseWorker::write_message(&mut message_inserter, event.clone())
                 .await

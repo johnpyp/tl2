@@ -17,3 +17,4 @@ config/*_local.yml
 clickhouse-data/
 stack-data/
 data/
+json-logs/

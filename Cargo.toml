@@ -8,36 +8,50 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.43"
+async-channel = "1.7.1"
 async-compression = { version = "0.3.8", features = ["futures-io", "tokio", "gzip"] }
 async-stream = "0.3.2"
-async-channel = "1.7.1"
-chrono = { version = "0.4.19", features = ["serde"] }
+async-trait = "0.1.61"
+avro-rs = "0.13.0"
+chrono = { version = "0.4.23", features = ["serde"] }
 clap = { version = "3.1", features = ["derive", "wrap_help"] }
-clickhouse = "0.9"
+clickhouse = "0.11.2"
 colored = "2.0.0"
 config = "0.11.0"
 derive_more = "0.99.16"
 elasticsearch = "7.14.0-alpha.1"
 enum_dispatch = "0.3.7"
 env_logger = "0.9.0"
+fasthash = "0.4.0"
 futures = "0.3.17"
 httparse = "1.5.1"
 humantime = "2.1.0"
 itertools = "0.10.0"
 log = "0.4.14"
-lru = "0.7"
+lru = "0.9.0"
 nom = "7.0.0"
+par-stream = { version = "0.10.2", features = ["runtime-tokio"] }
 pretty_env_logger = "0.4.0"
 rand = "0.8.4"
+rayon = "1.6.1"
 reqwest = { version = "0.11.4", features = ["json"] }
 serde = { version = "1.0.130", features = ["derive"] }
 serde_derive = "1.0.130"
 serde_json = "1.0.67"
+simd-json = "0.7.0"
 sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "sqlite", "chrono", "macros"]}
 strum = { version = "0.23", features = ["derive"] }
 tokio = { version = "1.11.0", features = ["full"] }
 tokio-compat-02 = "0.2.0"
 tokio-stream = { version = "0.1.7", features = ["sync", "net", "fs", "io-util"] }
 tokio-tungstenite = { version = "0.16.0", features = ["rustls", "rustls-tls-webpki-roots"] }
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = "0.3"
 twitch-irc = { version = "3.0.1", features = ["transport-ws-rustls-webpki-roots"] }
 voca_rs = "1.13.1"
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3
+
+[profile.release]
+debug = true

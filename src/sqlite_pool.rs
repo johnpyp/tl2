@@ -19,6 +19,7 @@ pub async fn create_sqlite(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
         .log_statements(LevelFilter::Trace)
         .to_owned();
     let pool = SqlitePoolOptions::new()
+        .max_connections(1)
         .connect_with(connect_options)
         .await?;
 

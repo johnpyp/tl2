@@ -1,13 +1,13 @@
+use rayon::prelude::*;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::path::PathBuf;
+use tokio::pin;
 
 use anyhow::Context;
 use anyhow::Result;
 use async_compression::tokio::bufread::GzipDecoder;
 use async_stream::try_stream;
-use chrono::DateTime;
-use chrono::Utc;
 use futures::Stream;
 use futures::TryStreamExt;
 use log::debug;
@@ -18,17 +18,9 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::io::BufReader;
 use tokio_stream::wrappers::ReadDirStream;
-use voca_rs::case;
 
-use crate::orl_line_parser::{parse_orl_line, RawOrlLog};
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct OrlLog {
-    pub ts: DateTime<Utc>,
-    pub username: String,
-    pub text: String,
-    pub channel: String,
-}
+use crate::formats::orl::OrlLog;
+use crate::sources::orl::orl_line_parser::parse_orl_line;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OrlDirFile {
@@ -36,27 +28,7 @@ pub struct OrlDirFile {
     pub channel: String,
 }
 
-impl OrlLog {
-    pub fn from_raw(raw: RawOrlLog, channel: &str) -> OrlLog {
-        OrlLog {
-            channel: channel.to_string(),
-            ts: raw.ts,
-            username: raw.username,
-            text: raw.text,
-        }
-    }
-
-    pub fn normalize(&self) -> OrlLog {
-        OrlLog {
-            ts: self.ts,
-            username: self.username.to_lowercase(),
-            text: self.text.trim().replace("\n", " "),
-            channel: case::capitalize(self.channel.trim(), true),
-        }
-    }
-}
-
-async fn read_file_to_string(path: &Path) -> Result<String> {
+pub async fn read_orl_file_to_string(path: &Path) -> Result<String> {
     let file = File::open(path).await?;
     let mut buf_reader = BufReader::new(file);
 
@@ -82,6 +54,22 @@ fn parse_contents_to_logs(contents: String, channel: &str) -> Vec<OrlLog> {
         .into_iter()
         .map(|line| line.trim())
         .flat_map(|line| parse_orl_line(channel, line))
+        .collect();
+}
+
+pub struct MinimalOrlLine {
+    channel: String,
+    line: String,
+}
+
+pub fn parse_minimal_lines(contents: String, channel: &str) -> Vec<MinimalOrlLine> {
+    return contents
+        .lines()
+        .into_iter()
+        .map(|x| MinimalOrlLine {
+            line: x.to_string(),
+            channel: channel.to_string(),
+        })
         .collect();
 }
 
@@ -140,8 +128,61 @@ pub async fn parse_orl_dir_to_logs(
         }
     })
 }
+
+fn create_orl_lines_stream(
+    orl_files: Vec<OrlDirFile>,
+) -> impl Stream<Item = Result<MinimalOrlLine>> {
+    try_stream! {
+        for file in orl_files {
+            debug!("Processing file: {:?}", file.path);
+            let contents = read_orl_file_to_string(&file.path).await?;
+            let minimal_lines = parse_minimal_lines(contents, &file.channel);
+            debug!("Got lines: {:?}", minimal_lines.len());
+            for line in minimal_lines {
+                yield line;
+            }
+        }
+    }
+}
+
+pub fn create_orl_messages_stream(
+    orl_files: Vec<OrlDirFile>,
+) -> impl Stream<Item = Result<OrlLog>> {
+    // let lines_stream = create_orl_lines_stream(orl_files);
+
+    // return lines_stream
+    //     .try_chunks(100_000)
+    //     .map_ok(|chunk| -> Vec<_> {
+    //         chunk
+    //             .par_iter()
+    //             .flat_map(|x| parse_orl_line(x.line.trim(), &x.channel))
+    //             .collect()
+    //     })
+    //     .map_ok(|messages| stream::iter(messages))
+    //     .flatten();
+
+    try_stream! {
+        let lines_stream = create_orl_lines_stream(orl_files);
+        pin!(lines_stream);
+        let mut stream = lines_stream.try_chunks(1_000_000);
+
+        while let Some(chunk) = stream.try_next().await? {
+            // debug!("Got one chunk of len: {:?}", chunk.len());
+            let messages: Vec<_> = chunk
+                .par_iter()
+                .flat_map(|x| parse_orl_line(&x.channel, x.line.trim()))
+                .collect();
+
+
+            for message in messages {
+                yield message;
+            }
+        }
+    }
+}
+
 pub async fn parse_file_to_logs(path: &Path, channel: &str) -> Result<Vec<OrlLog>> {
-    let contents = read_file_to_string(path).await?;
+    let contents = read_orl_file_to_string(path).await?;
     debug!("Contents length: {:?}", contents.len());
 
     Ok(parse_contents_to_logs(contents, channel))
@@ -151,7 +192,7 @@ pub async fn parse_file_to_logs(path: &Path, channel: &str) -> Result<Vec<OrlLog
 mod tests {
 
     use super::*;
-    use crate::orl_line_parser::parse_orl_date;
+    use crate::sources::orl::orl_line_parser::parse_orl_date;
 
     #[test]
     fn test_parse_contents_to_logs() {
@@ -166,12 +207,16 @@ mod tests {
                 ts: parse_orl_date("2021-08-04 00:44:12.616 UTC").unwrap(),
                 text: "!commands".into(),
                 username: "megablade136".into(),
+
+                is_normal: false,
             },
             OrlLog {
                 channel: "A_seagull".into(),
                 ts: parse_orl_date("2021-08-04 07:01:21.350 UTC").unwrap(),
                 text: "zakwern just subscribed with Prime for 1 months!".into(),
                 username: "@subscriber".into(),
+
+                is_normal: false,
             },
         ];
 

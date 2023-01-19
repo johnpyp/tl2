@@ -27,6 +27,8 @@ pub async fn jsonl_to_elasticsearch(
 
     let elasticsearch_bulk_sink = ElasticsearchBulkSink::new(elastic_url, elastic_index, None)?;
 
+    elasticsearch_bulk_sink.init_templates().await?;
+
     json_file_source.pipe(elasticsearch_bulk_sink).await
 }
 

@@ -238,8 +238,8 @@ pub async fn initialize_template(client: &Elasticsearch, index: &str) -> Result<
             "number_of_replicas": 0,
             "number_of_shards": 1,
             "refresh_interval": "10s",
-            "sort.field": ["ts", "ts"],
-            "sort.order": ["desc", "asc"],
+            "sort.field": ["ts"],
+            "sort.order": ["desc"],
             "codec": "best_compression",
           },
         }))

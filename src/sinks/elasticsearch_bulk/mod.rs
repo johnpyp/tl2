@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Result, Context};
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use elasticsearch::{http::request::JsonBody, BulkParts, Elasticsearch};
@@ -11,6 +11,7 @@ use par_stream::prelude::*;
 use serde_json::{json, Value};
 use tokio::{pin, time::Instant};
 
+use crate::adapters::elasticsearch::initialize_template;
 use crate::{
     adapters::elasticsearch::create_elasticsearch_client_from_url, formats::unified::OrlLog1_0,
 };
@@ -42,6 +43,12 @@ impl ElasticsearchBulkSink {
 
         let client = create_elasticsearch_client_from_url(opts.url.clone())?;
         Ok(ElasticsearchBulkSink { client, opts })
+    }
+
+    pub async fn init_templates(&self) -> Result<()> {
+        initialize_template(&self.client, &self.opts.index_base_name)
+            .await
+            .with_context(|| "Error initializing elasticsearch templates")
     }
 }
 

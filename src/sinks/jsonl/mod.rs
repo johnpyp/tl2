@@ -1,18 +1,18 @@
 use std::path::PathBuf;
 
-use crate::{
-    formats::orl::OrlLog,
-    sinks::jsonl::messages::{submit_orl_message_batch, JsonInputBatch},
-};
 use anyhow::Result;
 use async_trait::async_trait;
-use futures::{Stream, TryStreamExt};
+use futures::Stream;
+use futures::TryStreamExt;
 use log::info;
-use tokio::{pin, time::Instant};
+use tokio::pin;
+use tokio::time::Instant;
 
 use self::messages::JsonLinesSinkContext;
-
 use super::Sink;
+use crate::formats::orl::CleanOrlLog;
+use crate::sinks::jsonl::messages::submit_orl_message_batch;
+use crate::sinks::jsonl::messages::JsonInputBatch;
 
 pub mod messages;
 
@@ -30,8 +30,8 @@ impl JsonFileSink {
 const STREAM_CHUNK_SIZE: usize = 1_000_000;
 
 #[async_trait(?Send)]
-impl Sink<Result<OrlLog>> for JsonFileSink {
-    async fn run(mut self, stream: impl Stream<Item = Result<OrlLog>>) -> anyhow::Result<()> {
+impl Sink<Result<CleanOrlLog>> for JsonFileSink {
+    async fn run(mut self, stream: impl Stream<Item = Result<CleanOrlLog>>) -> anyhow::Result<()> {
         pin!(stream);
 
         let mut chunked_stream = stream.try_chunks(STREAM_CHUNK_SIZE);

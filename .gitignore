@@ -18,3 +18,4 @@ clickhouse-data/
 stack-data/
 data/
 json-logs/
+copied-logs/

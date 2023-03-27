@@ -2,17 +2,21 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use async_stream::try_stream;
-use futures::{Stream, TryStreamExt};
-use log::{debug, info};
+use futures::Stream;
+use futures::TryStreamExt;
+use log::debug;
+use log::info;
 use tokio::time::Instant;
 
-use crate::{
-    sources::orl::orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlDirFile},
-    sinks::sqlite::messages::{init_unified_messages_tables, submit_orl_message_batch},
-    sqlite_pool::create_sqlite, formats::orl::OrlLog,
-};
+use crate::formats::orl::CleanOrlLog;
+use crate::sinks::sqlite::messages::init_unified_messages_tables;
+use crate::sinks::sqlite::messages::submit_orl_message_batch;
+use crate::sources::orl::orl_file_parser::parse_file_to_logs;
+use crate::sources::orl::orl_file_parser::read_orl_structured_dir;
+use crate::sources::orl::orl_file_parser::OrlDirFile;
+use crate::sqlite_pool::create_sqlite;
 
-fn create_message_stream(orl_files: Vec<OrlDirFile>) -> impl Stream<Item = Result<OrlLog>> {
+fn create_message_stream(orl_files: Vec<OrlDirFile>) -> impl Stream<Item = Result<CleanOrlLog>> {
     try_stream! {
         for file in orl_files {
             debug!("Processing file: {:?}", file.path);

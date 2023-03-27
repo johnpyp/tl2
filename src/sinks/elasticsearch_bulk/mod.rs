@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{bail, Result, Context};
+use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use elasticsearch::{http::request::JsonBody, BulkParts, Elasticsearch};

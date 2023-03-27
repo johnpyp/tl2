@@ -1,6 +1,8 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 
-use super::{shared::user::User, DggAsSimpleMessageGroup};
+use super::shared::user::User;
+use super::DggAsSimpleMessageGroup;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Names {
@@ -40,6 +42,6 @@ mod tests {
         assert!(names.users.get(0).unwrap().is_subscriber);
         assert!(names.users.get(1).unwrap().is_subscriber);
         assert!(names.users.get(1).unwrap().is_admin);
-        assert!(names.users.get(1).unwrap().is_moderator);
+        assert!(names.users.get(0).unwrap().is_moderator);
     }
 }

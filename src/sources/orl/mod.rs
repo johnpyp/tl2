@@ -6,17 +6,19 @@ use async_trait::async_trait;
 use futures::Stream;
 use log::debug;
 
-use crate::{formats::orl::OrlLog, sources::orl::orl_file_parser::parse_file_to_logs};
-
-use self::orl_file_parser::{OrlDirFile, read_orl_structured_dir};
-
+use self::orl_file_parser::read_orl_structured_dir;
+use self::orl_file_parser::OrlDirFile;
 use super::Source;
+use crate::formats::orl::CleanOrlLog;
+use crate::sources::orl::orl_file_parser::parse_file_to_logs;
 
+pub mod line_parser;
 pub mod orl_file_parser;
 pub mod orl_line_parser;
+pub mod parse_timestamp;
 
 pub struct OrlFileSource {
-    orl_dir: PathBuf
+    orl_dir: PathBuf,
 }
 
 impl OrlFileSource {
@@ -27,7 +29,7 @@ impl OrlFileSource {
     fn create_message_stream(
         &self,
         orl_files: Vec<OrlDirFile>,
-    ) -> impl Stream<Item = Result<OrlLog>> {
+    ) -> impl Stream<Item = Result<CleanOrlLog>> {
         try_stream! {
             for file in orl_files {
                 debug!("Processing file: {:?}", file.path);
@@ -38,15 +40,15 @@ impl OrlFileSource {
             }
         }
     }
-    pub async fn get_stream(&self) -> Result<impl Stream<Item = Result<OrlLog>>> {
+    pub async fn get_stream(&self) -> Result<impl Stream<Item = Result<CleanOrlLog>>> {
         let orl_files = read_orl_structured_dir(&self.orl_dir).await?;
         Ok(self.create_message_stream(orl_files))
     }
 }
 
 #[async_trait(?Send)]
-impl Source<Result<OrlLog>> for OrlFileSource {
-    async fn pipe(&mut self, sink: impl super::Sink<Result<OrlLog>>) -> anyhow::Result<()> {
+impl Source<Result<CleanOrlLog>> for OrlFileSource {
+    async fn pipe(&mut self, sink: impl super::Sink<Result<CleanOrlLog>>) -> anyhow::Result<()> {
         let stream = self.get_stream().await?;
         sink.run(stream).await?;
 

@@ -1,8 +1,6 @@
-use rayon::prelude::*;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::path::PathBuf;
-use tokio::pin;
 
 use anyhow::Context;
 use anyhow::Result;
@@ -11,16 +9,20 @@ use async_stream::try_stream;
 use futures::Stream;
 use futures::TryStreamExt;
 use log::debug;
-use serde::{Deserialize, Serialize};
+use rayon::prelude::*;
+use serde::Deserialize;
+use serde::Serialize;
 use tokio::fs;
 use tokio::fs::DirEntry;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::io::BufReader;
+use tokio::pin;
 use tokio_stream::wrappers::ReadDirStream;
 
+use super::line_parser::parse_orl_log;
+use crate::formats::orl::CleanOrlLog;
 use crate::formats::orl::OrlLog;
-use crate::sources::orl::orl_line_parser::parse_orl_line;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OrlDirFile {
@@ -48,12 +50,12 @@ pub async fn read_orl_file_to_string(path: &Path) -> Result<String> {
     Ok(contents)
 }
 
-fn parse_contents_to_logs(contents: String, channel: &str) -> Vec<OrlLog> {
+fn parse_contents_to_logs(contents: String, channel: &str) -> Vec<CleanOrlLog> {
     return contents
         .lines()
         .into_iter()
         .map(|line| line.trim())
-        .flat_map(|line| parse_orl_line(channel, line))
+        .flat_map(|line| parse_orl_log(channel.to_string(), line).ok())
         .collect();
 }
 
@@ -115,7 +117,7 @@ pub async fn read_orl_structured_dir(dir_path: &Path) -> Result<Vec<OrlDirFile>>
 }
 pub async fn parse_orl_dir_to_logs(
     dir_path: &Path,
-) -> Result<impl Stream<Item = Result<Vec<OrlLog>>>> {
+) -> Result<impl Stream<Item = Result<Vec<CleanOrlLog>>>> {
     let orl_dir_files = read_orl_structured_dir(dir_path).await?;
     Ok(try_stream! {
 
@@ -147,7 +149,7 @@ fn create_orl_lines_stream(
 
 pub fn create_orl_messages_stream(
     orl_files: Vec<OrlDirFile>,
-) -> impl Stream<Item = Result<OrlLog>> {
+) -> impl Stream<Item = Result<CleanOrlLog>> {
     // let lines_stream = create_orl_lines_stream(orl_files);
 
     // return lines_stream
@@ -170,7 +172,7 @@ pub fn create_orl_messages_stream(
             // debug!("Got one chunk of len: {:?}", chunk.len());
             let messages: Vec<_> = chunk
                 .par_iter()
-                .flat_map(|x| parse_orl_line(&x.channel, x.line.trim()))
+                .flat_map(|x| parse_orl_log(x.channel.to_string(), x.line.trim()).ok())
                 .collect();
 
 
@@ -181,7 +183,7 @@ pub fn create_orl_messages_stream(
     }
 }
 
-pub async fn parse_file_to_logs(path: &Path, channel: &str) -> Result<Vec<OrlLog>> {
+pub async fn parse_file_to_logs(path: &Path, channel: &str) -> Result<Vec<CleanOrlLog>> {
     let contents = read_orl_file_to_string(path).await?;
     debug!("Contents length: {:?}", contents.len());
 
@@ -191,7 +193,10 @@ pub async fn parse_file_to_logs(path: &Path, channel: &str) -> Result<Vec<OrlLog
 #[cfg(test)]
 mod tests {
 
+    use std::marker::PhantomData;
+
     use super::*;
+    use crate::formats::orl::Clean;
     use crate::sources::orl::orl_line_parser::parse_orl_date;
 
     #[test]
@@ -208,7 +213,7 @@ mod tests {
                 text: "!commands".into(),
                 username: "megablade136".into(),
 
-                is_normal: false,
+                _s: PhantomData::<Clean>,
             },
             OrlLog {
                 channel: "A_seagull".into(),
@@ -216,7 +221,7 @@ mod tests {
                 text: "zakwern just subscribed with Prime for 1 months!".into(),
                 username: "@subscriber".into(),
 
-                is_normal: false,
+                _s: PhantomData::<Clean>,
             },
         ];
 

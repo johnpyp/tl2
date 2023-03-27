@@ -1,17 +1,25 @@
 use std::fmt::Debug;
 
-use anyhow::{Context, Result};
-use chrono::{DateTime, NaiveDate, NaiveDateTime, ParseError, TimeZone, Utc};
-use nom::{
-    bytes::complete::{tag, take, take_until1},
-    character::complete::space1,
-    combinator::rest,
-    error::VerboseError,
-    sequence::tuple,
-    IResult,
-};
+use anyhow::Context;
+use anyhow::Result;
+use chrono::DateTime;
+use chrono::NaiveDate;
+use chrono::NaiveDateTime;
+use chrono::ParseError;
+use chrono::TimeZone;
+use chrono::Utc;
+use nom::bytes::complete::tag;
+use nom::bytes::complete::take;
+use nom::bytes::complete::take_until1;
+use nom::character::complete::space1;
+use nom::combinator::rest;
+use nom::error::VerboseError;
+use nom::sequence::tuple;
+use nom::IResult;
 
+use super::line_parser::OrlLineMessage;
 use crate::formats::orl::OrlLog;
+use crate::formats::orl::Raw;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct OrlDate {
@@ -83,13 +91,13 @@ pub fn parse_orl_line(channel: &str, input: &str) -> Option<OrlLog> {
     let timestamp = NaiveDate::from_ymd_opt(od.year, od.month, od.day)
         .and_then(|d| d.and_hms_milli_opt(od.hour, od.minute, od.second, od.ms))
         .map(|dt| Utc.from_utc_datetime(&dt))?;
+
     Some(OrlLog {
         ts: timestamp,
         channel: channel.to_string(),
         username: username.into(),
         text: text.into(),
-
-        is_normal: false,
+        _s: std::marker::PhantomData::<Raw>,
     })
 }
 
@@ -104,13 +112,14 @@ pub fn parse_orl_line_simple(channel: &str, line: &str) -> Result<OrlLog> {
         text,
         username,
         channel: channel.to_string(),
-
-        is_normal: false,
+        _s: std::marker::PhantomData::<Raw>,
     })
 }
 
 #[cfg(test)]
 mod tests {
+
+    use std::marker::PhantomData;
 
     use chrono::TimeZone;
 
@@ -124,10 +133,7 @@ mod tests {
             .and_then(|d| d.and_hms_milli_opt(0, 44, 12, 616))
             .map(|dt| Utc.from_utc_datetime(&dt))
             .unwrap();
-        assert_eq!(
-            datetime,
-            Ok(expected_date)
-        );
+        assert_eq!(datetime, Ok(expected_date));
     }
     #[test]
     fn test_parse_orl_line() {
@@ -141,7 +147,7 @@ mod tests {
             text: "!commands".to_string(),
             username: "megablade136".to_string(),
 
-            is_normal: false,
+            _s: PhantomData::<Raw>,
         };
         assert_eq!(
             parse_orl_line(

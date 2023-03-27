@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use env_logger::Env;
-use log::{error, info};
+use log::error;
+use log::info;
 use run_scrape_ingester::run_ingester;
 
 pub mod adapters;
@@ -16,13 +17,14 @@ pub mod sinks;
 pub mod sources;
 pub mod sqlite_pool;
 
-use clap::{self, Parser, ValueHint};
+use clap::Parser;
+use clap::ValueHint;
+use clap::{self};
 use scripts::file_to_sqlite::dir_to_sqlite;
 
-use crate::scripts::{
-    file_to_clickhouse::{dir_to_clickhouse, files_to_clickhouse},
-    file_to_elasticsearch::dir_to_elasticsearch,
-};
+use crate::scripts::file_to_clickhouse::dir_to_clickhouse;
+use crate::scripts::file_to_clickhouse::files_to_clickhouse;
+use crate::scripts::file_to_elasticsearch::dir_to_elasticsearch;
 
 #[derive(Parser, Debug)]
 #[clap(name = "tl2")]
@@ -119,6 +121,15 @@ enum Opt {
         #[clap(short, long, required = true)]
         index: String,
     },
+    JsonlToClickhouse {
+        /// Directory with file structure: <root>/<Channel name>/<YYYY-MM-DD>.jsonl(.gz|.br)
+        #[clap(value_hint = ValueHint::DirPath)]
+        directory: PathBuf,
+
+        /// Clickhouse database url
+        #[clap(short, long, required = true)]
+        url: String,
+    },
 }
 #[tokio::main]
 async fn main() {
@@ -198,6 +209,14 @@ async fn main() {
             info!("Elasticsearch Index: {:?}", index);
 
             if let Err(e) = scripts::jsonl_to_elasticsearch(directory, url, index).await {
+                error!("{:?}", e);
+            }
+        }
+        Opt::JsonlToClickhouse { directory, url } => {
+            info!("Directory: {:?}", directory);
+            info!("Clickhouse Url: {:?}", url);
+
+            if let Err(e) = scripts::jsonl_to_clickhouse(directory, url).await {
                 error!("{:?}", e);
             }
         }

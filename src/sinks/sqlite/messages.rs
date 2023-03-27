@@ -1,7 +1,7 @@
 use anyhow::Result;
 use sqlx::SqlitePool;
 
-use crate::formats::orl::OrlLog;
+use crate::formats::orl::CleanOrlLog;
 
 pub async fn init_unified_messages_tables(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -40,12 +40,10 @@ pub async fn init_unified_messages_tables(pool: &SqlitePool) -> Result<(), sqlx:
     Ok(())
 }
 
-pub async fn submit_orl_message_batch(pool: &SqlitePool, logs: Vec<OrlLog>) -> Result<()> {
+pub async fn submit_orl_message_batch(pool: &SqlitePool, logs: Vec<CleanOrlLog>) -> Result<()> {
     let mut tx = pool.begin().await?;
 
     for log in logs {
-        let log = log.normalize();
-
         let id = log.get_id();
         let ts = log.get_unix_millis();
         let username = &log.username;

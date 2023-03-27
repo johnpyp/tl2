@@ -1,23 +1,31 @@
-use anyhow::{Context, Result};
-use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZstdDecoder};
+use std::ffi::OsStr;
+use std::path::Path;
+use std::path::PathBuf;
+
+use anyhow::Context;
+use anyhow::Result;
+use async_compression::tokio::bufread::BrotliDecoder;
+use async_compression::tokio::bufread::GzipDecoder;
+use async_compression::tokio::bufread::ZstdDecoder;
 use async_trait::async_trait;
-use futures::{future, stream, Stream, StreamExt, TryStreamExt};
+use futures::future;
+use futures::stream;
+use futures::Stream;
+use futures::StreamExt;
+use futures::TryStreamExt;
 use log::warn;
+use par_stream::ParParamsConfig;
 use par_stream::TryParStreamExt;
 use rayon::prelude::*;
-use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
-};
-use tokio::{
-    fs::{self, File},
-    io::{AsyncBufRead, AsyncRead, AsyncReadExt, BufReader},
-};
+use tokio::fs;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
+use tokio::io::BufReader;
 use tokio_stream::wrappers::ReadDirStream;
 
-use crate::{formats::unified::OrlLog1_0, sinks::Sink};
-
 use super::Source;
+use crate::formats::unified::OrlLog1_0;
+use crate::sinks::Sink;
 
 struct JsonFileTarget {
     path: PathBuf,
@@ -31,6 +39,11 @@ pub struct JsonFileSource {
     ctx: JsonFileSourceContext,
 }
 
+pub struct KnownSize<T> {
+    pub size: usize,
+    pub v: T,
+}
+
 impl JsonFileSource {
     pub fn new(root_dir: PathBuf) -> JsonFileSource {
         JsonFileSource {
@@ -38,16 +51,21 @@ impl JsonFileSource {
         }
     }
 
-    pub async fn create_orl_log_stream(&self) -> Result<impl Stream<Item = Result<OrlLog1_0>>> {
+    pub async fn create_orl_log_stream(
+        &self,
+    ) -> Result<impl Stream<Item = Result<KnownSize<OrlLog1_0>>>> {
         let target_stream = self.create_json_target_stream().await?;
 
         let log_stream = target_stream
-            .try_par_then_unordered(None, |target| async move {
-                let contents = JsonFileSource::read_target_contents(&target.path).await?;
-                Ok(contents)
-            })
-            .try_chunks(30)
-            .try_map_blocking(None, move |contents| {
+            .try_par_then_unordered(
+                ParParamsConfig::FixedWorkers { num_workers: 2 },
+                |target| async move {
+                    let contents = JsonFileSource::read_target_contents(&target.path).await?;
+                    Ok(contents)
+                },
+            )
+            .try_chunks(4)
+            .try_map_blocking(4, move |contents| {
                 let logs = JsonFileSource::parse_contents_to_logs(contents.join(""));
                 Ok(stream::iter(logs).map(Ok))
             })
@@ -58,7 +76,7 @@ impl JsonFileSource {
 
     // This is blocking, but it doesn't seem like putting this in a spawn_blocking loop helps with
     // performance much.
-    fn parse_contents_to_logs(contents: String) -> Vec<OrlLog1_0> {
+    fn parse_contents_to_logs(contents: String) -> Vec<KnownSize<OrlLog1_0>> {
         return contents
             .par_lines()
             .filter_map(JsonFileSource::parse_jsonl_line)
@@ -71,7 +89,7 @@ impl JsonFileSource {
             .collect();
     }
 
-    fn parse_jsonl_line(line: &str) -> Option<OrlLog1_0> {
+    fn parse_jsonl_line(line: &str) -> Option<KnownSize<OrlLog1_0>> {
         // let mut vec_bytes = line.as_bytes().to_vec();
         // Some(simd_json::serde::from_slice(&mut vec_bytes).unwrap_or_else(|_| panic!("Shouldn't fail parsing {:?}", line)))
 
@@ -84,10 +102,11 @@ impl JsonFileSource {
         //     text: "PepegaAim".to_string(),
         //     username: "lucrezia_002".to_string()
         // })
-        Some(
-            serde_json::from_str(line)
-                .unwrap_or_else(|_| panic!("Shouldn't fail parsing {:?}", line)),
-        )
+        let size = line.len();
+        let v = serde_json::from_str(line)
+            .unwrap_or_else(|_| panic!("Shouldn't fail parsing {:?}", line));
+        let obj = KnownSize { v, size };
+        Some(obj)
     }
 
     async fn read_target_contents(path: &Path) -> Result<String> {
@@ -185,6 +204,19 @@ impl JsonFileSource {
 #[async_trait(?Send)]
 impl Source<Result<OrlLog1_0>> for JsonFileSource {
     async fn pipe(&mut self, sink: impl Sink<Result<OrlLog1_0>>) -> anyhow::Result<()> {
+        let stream = self.create_orl_log_stream().await?;
+
+        let stream = stream.and_then(|x| future::ready(Ok(x.v)));
+
+        sink.run(stream).await?;
+
+        Ok(())
+    }
+}
+
+#[async_trait(?Send)]
+impl Source<Result<KnownSize<OrlLog1_0>>> for JsonFileSource {
+    async fn pipe(&mut self, sink: impl Sink<Result<KnownSize<OrlLog1_0>>>) -> anyhow::Result<()> {
         let stream = self.create_orl_log_stream().await?;
         sink.run(stream).await?;
 

@@ -6,7 +6,7 @@ use chrono::NaiveDate;
 
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
-use crate::formats::{orl::OrlLog, unified::UnifiedMessageLog};
+use crate::formats::{orl::CleanOrlLog, unified::UnifiedMessageLog};
 
 pub struct JsonLinesSinkContext {
     root_dir: PathBuf,
@@ -20,11 +20,11 @@ impl JsonLinesSinkContext {
 
 pub struct JsonInputBatch<'a> {
     ctx: &'a JsonLinesSinkContext,
-    logs: Vec<OrlLog>,
+    logs: Vec<CleanOrlLog>,
 }
 
 impl JsonInputBatch<'_> {
-    pub fn new(ctx: &'_ JsonLinesSinkContext, logs: Vec<OrlLog>) -> JsonInputBatch<'_> {
+    pub fn new(ctx: &'_ JsonLinesSinkContext, logs: Vec<CleanOrlLog>) -> JsonInputBatch<'_> {
         JsonInputBatch { ctx, logs }
     }
 }
@@ -39,7 +39,7 @@ struct JsonFileWriteBatch<'a> {
     ctx: &'a JsonLinesSinkContext,
     target: JsonFileTarget,
     // These logs should all have the same date as `day` when rounded
-    logs: Vec<OrlLog>,
+    logs: Vec<CleanOrlLog>,
 }
 
 impl JsonFileWriteBatch<'_> {
@@ -82,7 +82,7 @@ impl JsonFileWriteBatch<'_> {
 }
 
 fn group_logs(batch: JsonInputBatch) -> Vec<JsonFileWriteBatch> {
-    let mut day_map: HashMap<JsonFileTarget, Vec<OrlLog>> = HashMap::new();
+    let mut day_map: HashMap<JsonFileTarget, Vec<CleanOrlLog>> = HashMap::new();
     for log in batch.logs {
         let day = log.ts.date_naive();
         let target = JsonFileTarget {

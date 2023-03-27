@@ -1,34 +1,41 @@
-use std::{
-    env,
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-    time::{Duration, Instant},
-};
+use std::env;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::time::Duration;
+use std::time::Instant;
 
-use anyhow::{bail, Context, Result};
+use anyhow::bail;
+use anyhow::Context;
+use anyhow::Result;
 use async_channel::Receiver;
 use async_stream::try_stream;
-use elasticsearch::{http::request::JsonBody, BulkParts, Elasticsearch};
-use futures::{
-    future::{join_all, select},
-    Stream, TryStreamExt,
-};
-use log::{debug, info, warn};
-use serde_json::{json, Value};
+use elasticsearch::http::request::JsonBody;
+use elasticsearch::BulkParts;
+use elasticsearch::Elasticsearch;
+use futures::future::join_all;
+use futures::future::select;
+use futures::Stream;
+use futures::TryStreamExt;
+use log::debug;
+use log::info;
+use log::warn;
+use serde_json::json;
+use serde_json::Value;
 use tokio::time;
 
-use crate::{
-    adapters::elasticsearch::{create_elasticsearch_client_from_url, initialize_template},
-    formats::orl::OrlLog,
-    sources::orl::orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlDirFile},
-};
+use crate::adapters::elasticsearch::create_elasticsearch_client_from_url;
+use crate::adapters::elasticsearch::initialize_template;
+use crate::formats::orl::CleanOrlLog;
+use crate::formats::orl::OrlLog;
+use crate::sources::orl::orl_file_parser::parse_file_to_logs;
+use crate::sources::orl::orl_file_parser::read_orl_structured_dir;
+use crate::sources::orl::orl_file_parser::OrlDirFile;
 
 fn create_message_stream_recv(
     orl_files_receiver: Receiver<Vec<OrlDirFile>>,
-) -> impl Stream<Item = Result<OrlLog>> {
+) -> impl Stream<Item = Result<CleanOrlLog>> {
     try_stream! {
         while let Ok(orl_files) = orl_files_receiver.recv().await {
             for file in orl_files {
@@ -61,13 +68,12 @@ fn create_message_stream_recv(
 //
 pub async fn write_elastic_chunk(
     client: &Elasticsearch,
-    chunk: Vec<OrlLog>,
+    chunk: Vec<CleanOrlLog>,
     index: &str,
     pipeline: Option<&str>,
 ) -> Result<()> {
     let mut body: Vec<JsonBody<_>> = Vec::with_capacity(chunk.len() * 2);
     for msg in chunk {
-        let msg = msg.normalize();
         let username = msg.username.to_string();
         let ts = msg.ts.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 

@@ -1,23 +1,29 @@
-use std::{
-    path::PathBuf,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::iter::zip;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+use std::time::Instant;
 
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
+use anyhow::Result;
 use async_stream::try_stream;
-use clickhouse::{inserter::Inserter, Client};
+use clickhouse::inserter::Inserter;
+use clickhouse::Client;
+use futures::future::try_join_all;
+use futures::Stream;
 use futures::TryStreamExt;
-use futures::{future::try_join_all, Stream};
-use itertools::{zip, Itertools};
-use log::{debug, info};
-use tokio::{spawn, sync::Mutex};
+use itertools::Itertools;
+use log::debug;
+use log::info;
+use tokio::spawn;
+use tokio::sync::Mutex;
 
-use crate::{
-    adapters::clickhouse::messages_table::{self, ClickhouseOrlMessage},
-    formats::orl::OrlLog,
-    sources::orl::orl_file_parser::{parse_file_to_logs, read_orl_structured_dir, OrlDirFile},
-};
+use crate::adapters::clickhouse::messages_table::ClickhouseOrlMessage;
+use crate::adapters::clickhouse::messages_table::{self};
+use crate::formats::orl::CleanOrlLog;
+use crate::sources::orl::orl_file_parser::parse_file_to_logs;
+use crate::sources::orl::orl_file_parser::read_orl_structured_dir;
+use crate::sources::orl::orl_file_parser::OrlDirFile;
 
 type SyncInserter<T> = Arc<Mutex<Inserter<T>>>;
 async fn insert_messages(
@@ -155,7 +161,7 @@ async fn init_tables(client: &Client) -> Result<()> {
     Ok(())
 }
 
-fn orl_log_to_message(orl_log: OrlLog) -> ClickhouseOrlMessage {
+fn orl_log_to_message(orl_log: CleanOrlLog) -> ClickhouseOrlMessage {
     ClickhouseOrlMessage {
         ts: orl_log.ts.timestamp_millis(),
         text: orl_log.text,
